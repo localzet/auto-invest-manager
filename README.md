@@ -57,6 +57,8 @@ Admin API расположен под `/api/v1/admin` и требует заго
 - `PATCH|DELETE /api/v1/admin/watchlist/{item_id}`;
 - `GET|PATCH /api/v1/admin/risk-profile`;
 - `GET|PATCH /api/v1/admin/strategy-profile`.
+- `GET /api/v1/admin/signals`;
+- `POST /api/v1/admin/analysis/run`.
 
 Seed безопасных профилей выполняется при старте backend. Вручную:
 
@@ -84,4 +86,9 @@ profiles, снимков портфеля, рыночных данных и audi
 бизнес-логикой, чтобы миграции отражали реальные инварианты, а не преждевременные
 предположения.
 
-Следующий этап: signal engine v1 и сохранение рассчитанных сигналов.
+Signal Engine v1 использует 20 завершённых свечей и рассчитывает trend, moving
+average, volatility, volume и drawdown scores. Итоговая рекомендация принимает
+одно из значений `BUY`, `HOLD`, `SELL`, `WAIT`. Неполные, недостаточные или
+устаревшие рыночные данные отклоняются.
+
+Следующий этап: portfolio optimizer и rebalance planner.

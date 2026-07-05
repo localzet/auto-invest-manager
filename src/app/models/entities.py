@@ -21,7 +21,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from app.models.enums import OrderType, RebalanceMode, RiskMode, TradeMode
+from app.models.enums import (
+    OrderType,
+    RebalanceMode,
+    RiskMode,
+    SignalRecommendation,
+    TradeMode,
+)
 
 MONEY = Numeric(24, 9)
 WEIGHT = Numeric(8, 6)
@@ -187,6 +193,30 @@ class MarketPrice(UUIDPrimaryKeyMixin, Base):
     price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     source: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
+class Signal(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "signals"
+    __table_args__ = (Index("ix_signals_instrument_calculated", "instrument_id", "calculated_at"),)
+
+    instrument_id: Mapped[UUID] = mapped_column(
+        ForeignKey("instruments.id", ondelete="CASCADE"), nullable=False
+    )
+    timeframe: Mapped[str] = mapped_column(String(8), nullable=False)
+    trend_score: Mapped[Decimal] = mapped_column(WEIGHT, nullable=False)
+    moving_average_score: Mapped[Decimal] = mapped_column(WEIGHT, nullable=False)
+    volatility_score: Mapped[Decimal] = mapped_column(WEIGHT, nullable=False)
+    volume_score: Mapped[Decimal] = mapped_column(WEIGHT, nullable=False)
+    drawdown_score: Mapped[Decimal] = mapped_column(WEIGHT, nullable=False)
+    final_score: Mapped[Decimal] = mapped_column(WEIGHT, nullable=False)
+    recommendation: Mapped[SignalRecommendation] = mapped_column(
+        Enum(SignalRecommendation, name="signal_recommendation"), nullable=False
+    )
+    price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    calculated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    instrument: Mapped["Instrument"] = relationship(lazy="raise")
 
 
 class AuditLog(UUIDPrimaryKeyMixin, Base):

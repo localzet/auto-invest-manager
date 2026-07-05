@@ -6,7 +6,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.broker.dto import BrokerAccountData
-from app.models.enums import OrderType, RebalanceMode, RiskMode, TradeMode
+from app.models.enums import (
+    OrderType,
+    RebalanceMode,
+    RiskMode,
+    SignalRecommendation,
+    TradeMode,
+)
 
 Weight = Annotated[Decimal, Field(ge=0, le=1, max_digits=8, decimal_places=6)]
 PositiveMoney = Annotated[Decimal, Field(gt=0, max_digits=24, decimal_places=9)]
@@ -162,3 +168,24 @@ class StrategyProfileResponse(ORMModel):
 
 class AccountsResponse(BaseModel):
     accounts: tuple[BrokerAccountData, ...]
+
+
+class SignalResponse(ORMModel):
+    id: UUID
+    instrument: InstrumentResponse
+    timeframe: str
+    trend_score: Decimal
+    moving_average_score: Decimal
+    volatility_score: Decimal
+    volume_score: Decimal
+    drawdown_score: Decimal
+    final_score: Decimal
+    recommendation: SignalRecommendation
+    price: Decimal
+    reason: str
+    model_version: str
+    calculated_at: datetime
+
+
+class AnalysisRunResponse(BaseModel):
+    signals: list[SignalResponse]

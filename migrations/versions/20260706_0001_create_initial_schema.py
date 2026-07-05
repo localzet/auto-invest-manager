@@ -20,9 +20,11 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    Base.metadata.create_all(bind=bind, checkfirst=False)
+    tables = [table for table in Base.metadata.sorted_tables if table.name != "signals"]
+    Base.metadata.create_all(bind=bind, tables=tables, checkfirst=False)
 
 
 def downgrade() -> None:
     bind = op.get_bind()
-    Base.metadata.drop_all(bind=bind, checkfirst=False)
+    tables = [table for table in Base.metadata.sorted_tables if table.name != "signals"]
+    Base.metadata.drop_all(bind=bind, tables=tables, checkfirst=False)

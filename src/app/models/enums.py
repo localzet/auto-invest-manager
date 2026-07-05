@@ -28,3 +28,10 @@ class RebalanceMode(StrEnum):
 class OrderType(StrEnum):
     LIMIT = "LIMIT"
     MARKET = "MARKET"
+
+
+class SignalRecommendation(StrEnum):
+    BUY = "BUY"
+    HOLD = "HOLD"
+    SELL = "SELL"
+    WAIT = "WAIT"

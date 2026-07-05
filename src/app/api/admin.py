@@ -5,10 +5,12 @@ from fastapi import APIRouter, Depends, Response, status
 
 from app.admin.schemas import (
     AccountsResponse,
+    AnalysisRunResponse,
     InstrumentResponse,
     InstrumentSyncRequest,
     RiskProfileResponse,
     RiskProfileUpdate,
+    SignalResponse,
     StrategyProfileResponse,
     StrategyProfileUpdate,
     SystemSettingsResponse,
@@ -18,9 +20,10 @@ from app.admin.schemas import (
     WatchlistItemUpdate,
 )
 from app.admin.service import AdminService
-from app.api.dependencies import get_admin_service
+from app.api.dependencies import get_admin_service, get_signal_service
 from app.api.security import require_admin_api_key
 from app.models.entities import SystemSettings
+from app.signals.service import SignalAnalysisService
 
 router = APIRouter(
     prefix="/api/v1/admin",
@@ -28,6 +31,7 @@ router = APIRouter(
     dependencies=[Depends(require_admin_api_key)],
 )
 AdminServiceDependency = Annotated[AdminService, Depends(get_admin_service)]
+SignalServiceDependency = Annotated[SignalAnalysisService, Depends(get_signal_service)]
 
 
 def _settings_response(
@@ -125,3 +129,18 @@ async def update_strategy_profile(
     payload: StrategyProfileUpdate, service: AdminServiceDependency
 ) -> StrategyProfileResponse:
     return StrategyProfileResponse.model_validate(await service.update_strategy_profile(payload))
+
+
+@router.get("/signals", response_model=list[SignalResponse])
+async def get_latest_signals(
+    service: SignalServiceDependency,
+) -> list[SignalResponse]:
+    return [SignalResponse.model_validate(signal) for signal in await service.latest()]
+
+
+@router.post("/analysis/run", response_model=AnalysisRunResponse)
+async def run_analysis(service: SignalServiceDependency) -> AnalysisRunResponse:
+    signals = await service.run()
+    return AnalysisRunResponse(
+        signals=[SignalResponse.model_validate(signal) for signal in signals]
+    )
