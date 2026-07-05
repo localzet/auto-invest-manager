@@ -13,6 +13,7 @@ from app.broker.dto import (
     MoneyData,
     PortfolioData,
     PositionData,
+    TradingStatusData,
 )
 from app.broker.errors import BrokerConfigurationError, InstrumentNotFoundError
 
@@ -171,4 +172,14 @@ class TInvestClient:
                 time=item.time,
             )
             for item in response.last_prices
+        )
+
+    async def get_trading_status(self, instrument_uid: str) -> TradingStatusData:
+        async with self._client_factory(self._token, self._target) as client:
+            item = await client.market_data.get_trading_status(instrument_id=instrument_uid)
+        return TradingStatusData(
+            instrument_uid=instrument_uid,
+            api_trade_available=item.api_trade_available_flag,
+            market_order_available=item.market_order_available_flag,
+            limit_order_available=item.limit_order_available_flag,
         )

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -10,6 +11,7 @@ from app.broker.dto import (
     MoneyData,
     PortfolioData,
     PositionData,
+    TradingStatusData,
 )
 from app.broker.errors import InstrumentNotFoundError
 
@@ -17,7 +19,8 @@ MOCK_NOW = datetime(2026, 1, 5, 12, tzinfo=UTC)
 
 
 class MockBrokerProvider:
-    def __init__(self) -> None:
+    def __init__(self, clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+        self._clock = clock
         self._instruments = {
             ("SBER", "TQBR"): InstrumentData(
                 instrument_uid="mock-sber-uid",
@@ -74,7 +77,7 @@ class MockBrokerProvider:
                     average_price=MoneyData(Decimal("300.00"), "rub"),
                 ),
             ),
-            captured_at=MOCK_NOW,
+            captured_at=self._clock(),
         )
 
     async def find_instrument(self, ticker: str, class_code: str) -> InstrumentData:
@@ -121,6 +124,11 @@ class MockBrokerProvider:
         if unknown:
             raise InstrumentNotFoundError(f"Instruments not found: {sorted(unknown)}")
         return tuple(
-            LastPriceData(instrument_uid=uid, price=self._prices[uid], time=MOCK_NOW)
+            LastPriceData(instrument_uid=uid, price=self._prices[uid], time=self._clock())
             for uid in instrument_uids
         )
+
+    async def get_trading_status(self, instrument_uid: str) -> TradingStatusData:
+        if instrument_uid not in self._prices:
+            raise InstrumentNotFoundError(f"Instrument {instrument_uid} not found")
+        return TradingStatusData(instrument_uid, True, True, True)

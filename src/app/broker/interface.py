@@ -8,6 +8,7 @@ from app.broker.dto import (
     InstrumentData,
     LastPriceData,
     PortfolioData,
+    TradingStatusData,
 )
 
 
@@ -29,3 +30,5 @@ class BrokerProvider(Protocol):
     async def get_last_prices(
         self, instrument_uids: tuple[str, ...]
     ) -> tuple[LastPriceData, ...]: ...
+
+    async def get_trading_status(self, instrument_uid: str) -> TradingStatusData: ...

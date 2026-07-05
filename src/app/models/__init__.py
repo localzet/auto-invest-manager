@@ -5,6 +5,7 @@ from app.models.entities import (
     Instrument,
     MarketCandle,
     MarketPrice,
+    PlannedOrder,
     PortfolioSnapshot,
     Position,
     RebalancePlan,
@@ -13,6 +14,7 @@ from app.models.entities import (
     StrategyProfile,
     SystemSettings,
     TargetAllocation,
+    VirtualTrade,
     WatchlistItem,
 )
 
@@ -25,10 +27,12 @@ __all__ = [
     "MarketPrice",
     "PortfolioSnapshot",
     "Position",
+    "PlannedOrder",
     "RiskProfile",
     "RebalancePlan",
     "Signal",
     "TargetAllocation",
+    "VirtualTrade",
     "StrategyProfile",
     "SystemSettings",
     "WatchlistItem",

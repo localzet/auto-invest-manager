@@ -8,6 +8,8 @@ from app.admin.service import AdminService
 from app.broker.factory import create_broker_provider
 from app.core.config import Settings, get_settings
 from app.db.session import get_session
+from app.execution.repository import ExecutionRepository
+from app.execution.service import DryRunExecutionService
 from app.portfolio.repository import PortfolioRepository
 from app.portfolio.service import RebalanceService
 from app.signals.repository import SignalRepository
@@ -37,6 +39,17 @@ def get_rebalance_service(
 ) -> RebalanceService:
     return RebalanceService(
         PortfolioRepository(session),
+        create_broker_provider(settings),
+        settings,
+    )
+
+
+def get_execution_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> DryRunExecutionService:
+    return DryRunExecutionService(
+        ExecutionRepository(session),
         create_broker_provider(settings),
         settings,
     )

@@ -23,7 +23,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import (
     AllocationAction,
+    OrderDirection,
     OrderType,
+    PlannedOrderStatus,
     RebalanceMode,
     RebalancePlanStatus,
     RiskMode,
@@ -261,6 +263,65 @@ class TargetAllocation(UUIDPrimaryKeyMixin, Base):
     recommended_lots: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     plan: Mapped["RebalancePlan"] = relationship(back_populates="allocations", lazy="raise")
+    instrument: Mapped["Instrument"] = relationship(lazy="raise")
+
+
+class PlannedOrder(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "planned_orders"
+
+    rebalance_plan_id: Mapped[UUID] = mapped_column(
+        ForeignKey("rebalance_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    instrument_id: Mapped[UUID] = mapped_column(
+        ForeignKey("instruments.id", ondelete="RESTRICT"), nullable=False
+    )
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    direction: Mapped[OrderDirection] = mapped_column(
+        Enum(OrderDirection, name="order_direction"), nullable=False
+    )
+    lots: Mapped[int] = mapped_column(Integer, nullable=False)
+    order_type: Mapped[OrderType] = mapped_column(
+        Enum(OrderType, name="order_type", create_type=False), nullable=False
+    )
+    limit_price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[PlannedOrderStatus] = mapped_column(
+        Enum(PlannedOrderStatus, name="planned_order_status"), nullable=False
+    )
+    trade_mode: Mapped[TradeMode] = mapped_column(
+        Enum(TradeMode, name="trade_mode", create_type=False), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    instrument: Mapped["Instrument"] = relationship(lazy="raise")
+    virtual_trade: Mapped["VirtualTrade | None"] = relationship(
+        back_populates="planned_order", uselist=False, lazy="raise"
+    )
+
+
+class VirtualTrade(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "virtual_trades"
+
+    planned_order_id: Mapped[UUID] = mapped_column(
+        ForeignKey("planned_orders.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    instrument_id: Mapped[UUID] = mapped_column(
+        ForeignKey("instruments.id", ondelete="RESTRICT"), nullable=False
+    )
+    direction: Mapped[OrderDirection] = mapped_column(
+        Enum(OrderDirection, name="order_direction", create_type=False), nullable=False
+    )
+    lots: Mapped[int] = mapped_column(Integer, nullable=False)
+    price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    total_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    executed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    planned_order: Mapped["PlannedOrder"] = relationship(
+        back_populates="virtual_trade", lazy="raise"
+    )
     instrument: Mapped["Instrument"] = relationship(lazy="raise")
 
 

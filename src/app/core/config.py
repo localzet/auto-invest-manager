@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     tinvest_account_id: str | None = None
     tinvest_target: Literal["prod", "sandbox"] = "sandbox"
     admin_api_key: Annotated[SecretStr, Field(min_length=32)] | None = None
+    market_price_max_age_seconds: int = Field(default=60, gt=0, le=3600)
 
 
 @lru_cache

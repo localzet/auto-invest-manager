@@ -8,6 +8,7 @@ from app.admin.schemas import (
     AnalysisRunResponse,
     InstrumentResponse,
     InstrumentSyncRequest,
+    PlannedOrderResponse,
     RebalancePlanResponse,
     RiskProfileResponse,
     RiskProfileUpdate,
@@ -16,13 +17,20 @@ from app.admin.schemas import (
     StrategyProfileUpdate,
     SystemSettingsResponse,
     SystemSettingsUpdate,
+    VirtualTradeResponse,
     WatchlistItemCreate,
     WatchlistItemResponse,
     WatchlistItemUpdate,
 )
 from app.admin.service import AdminService
-from app.api.dependencies import get_admin_service, get_rebalance_service, get_signal_service
+from app.api.dependencies import (
+    get_admin_service,
+    get_execution_service,
+    get_rebalance_service,
+    get_signal_service,
+)
 from app.api.security import require_admin_api_key
+from app.execution.service import DryRunExecutionService
 from app.models.entities import SystemSettings
 from app.portfolio.service import RebalanceService
 from app.signals.service import SignalAnalysisService
@@ -35,6 +43,7 @@ router = APIRouter(
 AdminServiceDependency = Annotated[AdminService, Depends(get_admin_service)]
 SignalServiceDependency = Annotated[SignalAnalysisService, Depends(get_signal_service)]
 RebalanceServiceDependency = Annotated[RebalanceService, Depends(get_rebalance_service)]
+ExecutionServiceDependency = Annotated[DryRunExecutionService, Depends(get_execution_service)]
 
 
 def _settings_response(
@@ -161,3 +170,31 @@ async def run_rebalance_planning(
     service: RebalanceServiceDependency,
 ) -> RebalancePlanResponse:
     return RebalancePlanResponse.model_validate(await service.create_plan())
+
+
+@router.post(
+    "/rebalance-plans/{plan_id}/execution-plan",
+    response_model=list[PlannedOrderResponse],
+)
+async def create_execution_plan(
+    plan_id: UUID, service: ExecutionServiceDependency
+) -> list[PlannedOrderResponse]:
+    return [
+        PlannedOrderResponse.model_validate(order) for order in await service.plan_orders(plan_id)
+    ]
+
+
+@router.post("/planned-orders/{order_id}/dry-run", response_model=VirtualTradeResponse)
+async def execute_dry_run(
+    order_id: UUID, service: ExecutionServiceDependency
+) -> VirtualTradeResponse:
+    return VirtualTradeResponse.model_validate(await service.execute(order_id))
+
+
+@router.get("/virtual-trades", response_model=list[VirtualTradeResponse])
+async def get_virtual_trades(
+    service: ExecutionServiceDependency,
+) -> list[VirtualTradeResponse]:
+    return [
+        VirtualTradeResponse.model_validate(trade) for trade in await service.list_virtual_trades()
+    ]

@@ -48,3 +48,15 @@ class AllocationAction(StrEnum):
     BUY = "BUY"
     SELL = "SELL"
     HOLD = "HOLD"
+
+
+class OrderDirection(StrEnum):
+    BUY = "BUY"
+    SELL = "SELL"
+
+
+class PlannedOrderStatus(StrEnum):
+    PLANNED = "PLANNED"
+    RISK_REJECTED = "RISK_REJECTED"
+    SIMULATED = "SIMULATED"
+    WAITING_CONFIRMATION = "WAITING_CONFIRMATION"

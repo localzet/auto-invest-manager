@@ -8,7 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.broker.dto import BrokerAccountData
 from app.models.enums import (
     AllocationAction,
+    OrderDirection,
     OrderType,
+    PlannedOrderStatus,
     RebalanceMode,
     RebalancePlanStatus,
     RiskMode,
@@ -216,3 +218,28 @@ class RebalancePlanResponse(ORMModel):
     reason: str
     created_at: datetime
     allocations: list[TargetAllocationResponse]
+
+
+class PlannedOrderResponse(ORMModel):
+    id: UUID
+    instrument: InstrumentResponse
+    account_id: str
+    direction: OrderDirection
+    lots: int
+    order_type: OrderType
+    limit_price: Decimal
+    reason: str
+    status: PlannedOrderStatus
+    trade_mode: TradeMode
+    idempotency_key: str
+    created_at: datetime
+
+
+class VirtualTradeResponse(ORMModel):
+    id: UUID
+    instrument: InstrumentResponse
+    direction: OrderDirection
+    lots: int
+    price: Decimal
+    total_amount: Decimal
+    executed_at: datetime

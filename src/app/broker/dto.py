@@ -73,3 +73,11 @@ class LastPriceData:
     instrument_uid: str
     price: Decimal
     time: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class TradingStatusData:
+    instrument_uid: str
+    api_trade_available: bool
+    market_order_available: bool
+    limit_order_available: bool

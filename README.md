@@ -61,6 +61,9 @@ Admin API расположен под `/api/v1/admin` и требует заго
 - `POST /api/v1/admin/analysis/run`.
 - `GET /api/v1/admin/rebalance-plans`;
 - `POST /api/v1/admin/rebalance-plans/run`.
+- `POST /api/v1/admin/rebalance-plans/{plan_id}/execution-plan`;
+- `POST /api/v1/admin/planned-orders/{order_id}/dry-run`;
+- `GET /api/v1/admin/virtual-trades`.
 
 Seed безопасных профилей выполняется при старте backend. Вручную:
 
@@ -98,4 +101,9 @@ cash reserve и применяет ограничения позиции. Rebala
 лоты, доступный кэш и порог ребалансировки. При нулевом кэше целевые рекомендации
 сохраняются, но заявки на покупку не формируются.
 
-Следующий этап: execution planner и dry-run executor.
+Dry-run executor перед каждой виртуальной сделкой повторно проверяет kill switch,
+режим, счёт, watchlist, торговый статус, свежесть цены, кэш, лимиты позиции и сделки,
+дневной лимит, cooldown, идемпотентность и отсутствие дубликатов. Брокерские заявки
+в этом контуре не создаются.
+
+Следующий этап: sandbox executor.
