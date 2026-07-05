@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     tinvest_sandbox_token: SecretStr | None = None
     tinvest_account_id: str | None = None
     tinvest_target: Literal["prod", "sandbox"] = "sandbox"
+    admin_api_key: Annotated[SecretStr, Field(min_length=32)] | None = None
 
 
 @lru_cache

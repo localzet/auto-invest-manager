@@ -18,7 +18,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import OrderType, RebalanceMode, RiskMode, TradeMode
@@ -74,6 +74,7 @@ class WatchlistItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         WEIGHT, default=Decimal("0.5"), nullable=False
     )
     manual_target_weight: Mapped[Decimal | None] = mapped_column(WEIGHT)
+    instrument: Mapped["Instrument"] = relationship(lazy="raise")
 
 
 class RiskProfile(UUIDPrimaryKeyMixin, TimestampMixin, Base):

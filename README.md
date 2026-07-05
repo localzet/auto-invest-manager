@@ -15,6 +15,7 @@ healthcheck и абстракцию получения данных T-Invest с 
 ```powershell
 Copy-Item .env.example .env
 # Обязательно замените POSTGRES_PASSWORD и пароль в DATABASE_URL на одинаковое значение.
+# Задайте ADMIN_API_KEY случайной строкой длиной не менее 32 символов.
 docker compose up --build
 ```
 
@@ -43,6 +44,26 @@ uvicorn app.main:app --reload
 - `GET /docs` — Swagger UI;
 - `GET /openapi.json` — OpenAPI schema.
 
+Admin API расположен под `/api/v1/admin` и требует заголовок
+`X-Admin-API-Key`. Без настроенного `ADMIN_API_KEY` административные endpoints
+возвращают `503` — это безопасное поведение по умолчанию.
+
+Доступные endpoints этапа 3:
+
+- `GET /api/v1/admin/accounts`;
+- `GET|PATCH /api/v1/admin/settings`;
+- `POST /api/v1/admin/instruments/sync`;
+- `GET|POST /api/v1/admin/watchlist`;
+- `PATCH|DELETE /api/v1/admin/watchlist/{item_id}`;
+- `GET|PATCH /api/v1/admin/risk-profile`;
+- `GET|PATCH /api/v1/admin/strategy-profile`.
+
+Seed безопасных профилей выполняется при старте backend. Вручную:
+
+```powershell
+python -m app.commands.seed
+```
+
 ## Проверки
 
 ```powershell
@@ -63,4 +84,4 @@ profiles, снимков портфеля, рыночных данных и audi
 бизнес-логикой, чтобы миграции отражали реальные инварианты, а не преждевременные
 предположения.
 
-Следующий этап: watchlist, системные настройки, risk/strategy profiles и admin API.
+Следующий этап: signal engine v1 и сохранение рассчитанных сигналов.
