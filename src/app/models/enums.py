@@ -35,3 +35,16 @@ class SignalRecommendation(StrEnum):
     HOLD = "HOLD"
     SELL = "SELL"
     WAIT = "WAIT"
+
+
+class RebalancePlanStatus(StrEnum):
+    DRAFT = "DRAFT"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EXECUTED = "EXECUTED"
+
+
+class AllocationAction(StrEnum):
+    BUY = "BUY"
+    SELL = "SELL"
+    HOLD = "HOLD"

@@ -7,10 +7,12 @@ from app.models.entities import (
     MarketPrice,
     PortfolioSnapshot,
     Position,
+    RebalancePlan,
     RiskProfile,
     Signal,
     StrategyProfile,
     SystemSettings,
+    TargetAllocation,
     WatchlistItem,
 )
 
@@ -24,7 +26,9 @@ __all__ = [
     "PortfolioSnapshot",
     "Position",
     "RiskProfile",
+    "RebalancePlan",
     "Signal",
+    "TargetAllocation",
     "StrategyProfile",
     "SystemSettings",
     "WatchlistItem",

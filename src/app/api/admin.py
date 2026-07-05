@@ -8,6 +8,7 @@ from app.admin.schemas import (
     AnalysisRunResponse,
     InstrumentResponse,
     InstrumentSyncRequest,
+    RebalancePlanResponse,
     RiskProfileResponse,
     RiskProfileUpdate,
     SignalResponse,
@@ -20,9 +21,10 @@ from app.admin.schemas import (
     WatchlistItemUpdate,
 )
 from app.admin.service import AdminService
-from app.api.dependencies import get_admin_service, get_signal_service
+from app.api.dependencies import get_admin_service, get_rebalance_service, get_signal_service
 from app.api.security import require_admin_api_key
 from app.models.entities import SystemSettings
+from app.portfolio.service import RebalanceService
 from app.signals.service import SignalAnalysisService
 
 router = APIRouter(
@@ -32,6 +34,7 @@ router = APIRouter(
 )
 AdminServiceDependency = Annotated[AdminService, Depends(get_admin_service)]
 SignalServiceDependency = Annotated[SignalAnalysisService, Depends(get_signal_service)]
+RebalanceServiceDependency = Annotated[RebalanceService, Depends(get_rebalance_service)]
 
 
 def _settings_response(
@@ -144,3 +147,17 @@ async def run_analysis(service: SignalServiceDependency) -> AnalysisRunResponse:
     return AnalysisRunResponse(
         signals=[SignalResponse.model_validate(signal) for signal in signals]
     )
+
+
+@router.get("/rebalance-plans", response_model=list[RebalancePlanResponse])
+async def get_rebalance_plans(
+    service: RebalanceServiceDependency,
+) -> list[RebalancePlanResponse]:
+    return [RebalancePlanResponse.model_validate(plan) for plan in await service.list_plans()]
+
+
+@router.post("/rebalance-plans/run", response_model=RebalancePlanResponse)
+async def run_rebalance_planning(
+    service: RebalanceServiceDependency,
+) -> RebalancePlanResponse:
+    return RebalancePlanResponse.model_validate(await service.create_plan())

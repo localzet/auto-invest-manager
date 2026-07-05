@@ -22,8 +22,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import (
+    AllocationAction,
     OrderType,
     RebalanceMode,
+    RebalancePlanStatus,
     RiskMode,
     SignalRecommendation,
     TradeMode,
@@ -216,6 +218,49 @@ class Signal(UUIDPrimaryKeyMixin, Base):
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     model_version: Mapped[str] = mapped_column(String(64), nullable=False)
     calculated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    instrument: Mapped["Instrument"] = relationship(lazy="raise")
+
+
+class RebalancePlan(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "rebalance_plans"
+
+    source_account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[RebalancePlanStatus] = mapped_column(
+        Enum(RebalancePlanStatus, name="rebalance_plan_status"), nullable=False
+    )
+    portfolio_value: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    cash_available: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    target_cash_weight: Mapped[Decimal] = mapped_column(WEIGHT, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    allocations: Mapped[list["TargetAllocation"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan", lazy="raise"
+    )
+
+
+class TargetAllocation(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "target_allocations"
+    __table_args__ = (UniqueConstraint("rebalance_plan_id", "instrument_id"),)
+
+    rebalance_plan_id: Mapped[UUID] = mapped_column(
+        ForeignKey("rebalance_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    instrument_id: Mapped[UUID] = mapped_column(
+        ForeignKey("instruments.id", ondelete="RESTRICT"), nullable=False
+    )
+    target_weight: Mapped[Decimal] = mapped_column(WEIGHT, nullable=False)
+    current_weight: Mapped[Decimal] = mapped_column(WEIGHT, nullable=False)
+    signal_score: Mapped[Decimal] = mapped_column(WEIGHT, nullable=False)
+    target_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    delta_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    action: Mapped[AllocationAction] = mapped_column(
+        Enum(AllocationAction, name="allocation_action"), nullable=False
+    )
+    recommended_lots: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    plan: Mapped["RebalancePlan"] = relationship(back_populates="allocations", lazy="raise")
     instrument: Mapped["Instrument"] = relationship(lazy="raise")
 
 

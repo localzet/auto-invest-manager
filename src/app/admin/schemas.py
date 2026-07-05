@@ -7,8 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.broker.dto import BrokerAccountData
 from app.models.enums import (
+    AllocationAction,
     OrderType,
     RebalanceMode,
+    RebalancePlanStatus,
     RiskMode,
     SignalRecommendation,
     TradeMode,
@@ -189,3 +191,28 @@ class SignalResponse(ORMModel):
 
 class AnalysisRunResponse(BaseModel):
     signals: list[SignalResponse]
+
+
+class TargetAllocationResponse(ORMModel):
+    id: UUID
+    instrument: InstrumentResponse
+    target_weight: Decimal
+    current_weight: Decimal
+    signal_score: Decimal
+    target_amount: Decimal
+    delta_amount: Decimal
+    action: AllocationAction
+    recommended_lots: int
+    reason: str
+
+
+class RebalancePlanResponse(ORMModel):
+    id: UUID
+    source_account_id: str
+    status: RebalancePlanStatus
+    portfolio_value: Decimal
+    cash_available: Decimal
+    target_cash_weight: Decimal
+    reason: str
+    created_at: datetime
+    allocations: list[TargetAllocationResponse]
