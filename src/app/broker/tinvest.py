@@ -13,6 +13,8 @@ from app.broker.dto import (
     MoneyData,
     PortfolioData,
     PositionData,
+    SandboxOrderRequest,
+    SandboxOrderResult,
     TradingStatusData,
 )
 from app.broker.errors import BrokerConfigurationError, InstrumentNotFoundError
@@ -182,4 +184,32 @@ class TInvestClient:
             api_trade_available=item.api_trade_available_flag,
             market_order_available=item.market_order_available_flag,
             limit_order_available=item.limit_order_available_flag,
+        )
+
+    async def post_sandbox_order(self, request: SandboxOrderRequest) -> SandboxOrderResult:
+        if self._target != "sandbox-invest-public-api.tinkoff.ru:443":
+            raise BrokerConfigurationError("Sandbox order requires sandbox target")
+        from tinkoff.invest import OrderDirection as SdkDirection
+        from tinkoff.invest import OrderType as SdkOrderType
+        from tinkoff.invest.utils import decimal_to_quotation
+
+        direction = getattr(SdkDirection, f"ORDER_DIRECTION_{request.direction.value}")
+        order_type = getattr(SdkOrderType, f"ORDER_TYPE_{request.order_type.value}")
+        async with self._client_factory(self._token, self._target) as client:
+            response = await client.sandbox.post_sandbox_order(
+                instrument_id=request.instrument_uid,
+                quantity=request.quantity_lots,
+                price=decimal_to_quotation(request.price),
+                direction=direction,
+                account_id=request.account_id,
+                order_type=order_type,
+                order_id=request.order_id,
+            )
+        return SandboxOrderResult(
+            broker_order_id=response.order_id,
+            broker_status=_enum_name(response.execution_report_status),
+            lots_requested=response.lots_requested,
+            lots_executed=response.lots_executed,
+            execution_price=_decimal(response.executed_order_price),
+            total_amount=_decimal(response.total_order_amount),
         )

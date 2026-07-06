@@ -3,6 +3,8 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
+from app.models.enums import OrderDirection, OrderType
+
 
 class CandleInterval(StrEnum):
     HOUR = "1h"
@@ -81,3 +83,24 @@ class TradingStatusData:
     api_trade_available: bool
     market_order_available: bool
     limit_order_available: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxOrderRequest:
+    account_id: str
+    instrument_uid: str
+    quantity_lots: int
+    direction: OrderDirection
+    order_type: OrderType
+    price: Decimal
+    order_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxOrderResult:
+    broker_order_id: str
+    broker_status: str
+    lots_requested: int
+    lots_executed: int
+    execution_price: Decimal
+    total_amount: Decimal

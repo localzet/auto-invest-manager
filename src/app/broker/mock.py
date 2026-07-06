@@ -11,6 +11,8 @@ from app.broker.dto import (
     MoneyData,
     PortfolioData,
     PositionData,
+    SandboxOrderRequest,
+    SandboxOrderResult,
     TradingStatusData,
 )
 from app.broker.errors import InstrumentNotFoundError
@@ -132,3 +134,6 @@ class MockBrokerProvider:
         if instrument_uid not in self._prices:
             raise InstrumentNotFoundError(f"Instrument {instrument_uid} not found")
         return TradingStatusData(instrument_uid, True, True, True)
+
+    async def post_sandbox_order(self, request: SandboxOrderRequest) -> SandboxOrderResult:
+        raise RuntimeError("Mock provider cannot place sandbox broker orders")

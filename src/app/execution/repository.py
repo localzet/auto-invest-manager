@@ -5,9 +5,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.broker.dto import SandboxOrderResult
 from app.execution.dto import PlannedOrderData
 from app.models.entities import (
     AuditLog,
+    ExecutionOrder,
+    OrderEvent,
     PlannedOrder,
     RebalancePlan,
     RiskProfile,
@@ -16,7 +19,7 @@ from app.models.entities import (
     VirtualTrade,
     WatchlistItem,
 )
-from app.models.enums import PlannedOrderStatus
+from app.models.enums import PlannedOrderStatus, TradeMode
 
 
 class ExecutionRepository:
@@ -104,21 +107,44 @@ class ExecutionRepository:
             )
         )
 
-    async def count_virtual_trades_since(self, since: datetime) -> int:
-        return int(
+    async def count_trades_since(self, since: datetime) -> int:
+        virtual_count = int(
             await self._session.scalar(
                 select(func.count(VirtualTrade.id)).where(VirtualTrade.executed_at >= since)
             )
             or 0
         )
+        execution_count = int(
+            await self._session.scalar(
+                select(func.count(ExecutionOrder.id)).where(ExecutionOrder.created_at >= since)
+            )
+            or 0
+        )
+        return virtual_count + execution_count
 
-    async def latest_virtual_trade(self, instrument_id: UUID) -> VirtualTrade | None:
-        return await self._session.scalar(
-            select(VirtualTrade)
+    async def latest_trade_time(self, instrument_id: UUID) -> datetime | None:
+        virtual_time = await self._session.scalar(
+            select(VirtualTrade.executed_at)
             .where(VirtualTrade.instrument_id == instrument_id)
             .order_by(VirtualTrade.executed_at.desc())
             .limit(1)
         )
+        execution_time = await self._session.scalar(
+            select(ExecutionOrder.created_at)
+            .join(PlannedOrder, PlannedOrder.id == ExecutionOrder.planned_order_id)
+            .where(PlannedOrder.instrument_id == instrument_id)
+            .order_by(ExecutionOrder.created_at.desc())
+            .limit(1)
+        )
+        timestamps = [
+            timestamp
+            for timestamp in (
+                virtual_time,
+                execution_time,
+            )
+            if timestamp is not None
+        ]
+        return max(timestamps) if timestamps else None
 
     async def has_duplicate_order(self, order: PlannedOrder) -> bool:
         duplicate = await self._session.scalar(
@@ -175,3 +201,50 @@ class ExecutionRepository:
             .limit(limit)
         )
         return list(result.all())
+
+    async def get_execution_order(self, planned_order_id: UUID) -> ExecutionOrder | None:
+        return await self._session.scalar(
+            select(ExecutionOrder)
+            .where(ExecutionOrder.planned_order_id == planned_order_id)
+            .options(joinedload(ExecutionOrder.planned_order))
+        )
+
+    async def save_sandbox_execution(
+        self, order: PlannedOrder, result: SandboxOrderResult
+    ) -> ExecutionOrder:
+        execution = ExecutionOrder(
+            planned_order_id=order.id,
+            broker_order_id=result.broker_order_id,
+            broker_status=result.broker_status,
+            lots_requested=result.lots_requested,
+            lots_executed=result.lots_executed,
+            execution_price=result.execution_price,
+            total_amount=result.total_amount,
+            trade_mode=TradeMode.SANDBOX,
+        )
+        execution.planned_order = order
+        execution.events.append(
+            OrderEvent(
+                event_type="ORDER_POSTED",
+                broker_status=result.broker_status,
+                payload={
+                    "broker_order_id": result.broker_order_id,
+                    "lots_requested": result.lots_requested,
+                    "lots_executed": result.lots_executed,
+                },
+            )
+        )
+        order.status = PlannedOrderStatus.SUBMITTED
+        self._session.add(execution)
+        self._session.add(
+            AuditLog(
+                event_type="order.sandbox_posted",
+                message="Order posted to T-Invest sandbox",
+                context={
+                    "planned_order_id": str(order.id),
+                    "broker_order_id": result.broker_order_id,
+                },
+            )
+        )
+        await self._session.commit()
+        return execution

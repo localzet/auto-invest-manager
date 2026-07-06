@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from app.execution.dto import PlannedOrderData, RiskContext, RiskDecision
-from app.models.enums import OrderDirection, TradeMode
+from app.models.enums import OrderDirection
 
 
 class RiskManager:
@@ -11,8 +11,11 @@ class RiskManager:
 
         if context.kill_switch:
             reasons.append("global kill switch is active")
-        if context.trade_mode is not TradeMode.DRY_RUN or order.trade_mode is not TradeMode.DRY_RUN:
-            reasons.append("trade mode is not DRY_RUN")
+        if (
+            context.trade_mode is not context.required_trade_mode
+            or order.trade_mode is not context.required_trade_mode
+        ):
+            reasons.append(f"trade mode is not {context.required_trade_mode.value}")
         if not context.account_id or context.account_id != context.expected_account_id:
             reasons.append("account mismatch")
         if not context.in_watchlist:

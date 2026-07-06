@@ -325,6 +325,42 @@ class VirtualTrade(UUIDPrimaryKeyMixin, Base):
     instrument: Mapped["Instrument"] = relationship(lazy="raise")
 
 
+class ExecutionOrder(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "execution_orders"
+
+    planned_order_id: Mapped[UUID] = mapped_column(
+        ForeignKey("planned_orders.id", ondelete="RESTRICT"), unique=True, nullable=False
+    )
+    broker_order_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    broker_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    lots_requested: Mapped[int] = mapped_column(Integer, nullable=False)
+    lots_executed: Mapped[int] = mapped_column(Integer, nullable=False)
+    execution_price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    total_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    trade_mode: Mapped[TradeMode] = mapped_column(
+        Enum(TradeMode, name="trade_mode", create_type=False), nullable=False
+    )
+    planned_order: Mapped["PlannedOrder"] = relationship(lazy="raise")
+    events: Mapped[list["OrderEvent"]] = relationship(
+        back_populates="execution_order", cascade="all, delete-orphan", lazy="raise"
+    )
+
+
+class OrderEvent(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "order_events"
+
+    execution_order_id: Mapped[UUID] = mapped_column(
+        ForeignKey("execution_orders.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    broker_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    execution_order: Mapped["ExecutionOrder"] = relationship(back_populates="events", lazy="raise")
+
+
 class AuditLog(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "audit_logs"
 

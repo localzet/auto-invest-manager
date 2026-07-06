@@ -34,6 +34,7 @@ class PlannedOrderData:
 class RiskContext:
     kill_switch: bool
     trade_mode: TradeMode
+    required_trade_mode: TradeMode
     account_id: str
     expected_account_id: str
     in_watchlist: bool

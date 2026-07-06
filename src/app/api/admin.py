@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Response, status
 from app.admin.schemas import (
     AccountsResponse,
     AnalysisRunResponse,
+    ExecutionOrderResponse,
     InstrumentResponse,
     InstrumentSyncRequest,
     PlannedOrderResponse,
@@ -30,7 +31,7 @@ from app.api.dependencies import (
     get_signal_service,
 )
 from app.api.security import require_admin_api_key
-from app.execution.service import DryRunExecutionService
+from app.execution.service import ExecutionService
 from app.models.entities import SystemSettings
 from app.portfolio.service import RebalanceService
 from app.signals.service import SignalAnalysisService
@@ -43,7 +44,7 @@ router = APIRouter(
 AdminServiceDependency = Annotated[AdminService, Depends(get_admin_service)]
 SignalServiceDependency = Annotated[SignalAnalysisService, Depends(get_signal_service)]
 RebalanceServiceDependency = Annotated[RebalanceService, Depends(get_rebalance_service)]
-ExecutionServiceDependency = Annotated[DryRunExecutionService, Depends(get_execution_service)]
+ExecutionServiceDependency = Annotated[ExecutionService, Depends(get_execution_service)]
 
 
 def _settings_response(
@@ -189,6 +190,13 @@ async def execute_dry_run(
     order_id: UUID, service: ExecutionServiceDependency
 ) -> VirtualTradeResponse:
     return VirtualTradeResponse.model_validate(await service.execute(order_id))
+
+
+@router.post("/planned-orders/{order_id}/sandbox", response_model=ExecutionOrderResponse)
+async def execute_sandbox_order(
+    order_id: UUID, service: ExecutionServiceDependency
+) -> ExecutionOrderResponse:
+    return ExecutionOrderResponse.model_validate(await service.execute_sandbox(order_id))
 
 
 @router.get("/virtual-trades", response_model=list[VirtualTradeResponse])

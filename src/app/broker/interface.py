@@ -8,6 +8,8 @@ from app.broker.dto import (
     InstrumentData,
     LastPriceData,
     PortfolioData,
+    SandboxOrderRequest,
+    SandboxOrderResult,
     TradingStatusData,
 )
 
@@ -32,3 +34,5 @@ class BrokerProvider(Protocol):
     ) -> tuple[LastPriceData, ...]: ...
 
     async def get_trading_status(self, instrument_uid: str) -> TradingStatusData: ...
+
+    async def post_sandbox_order(self, request: SandboxOrderRequest) -> SandboxOrderResult: ...

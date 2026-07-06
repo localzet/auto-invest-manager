@@ -27,6 +27,7 @@ def context() -> RiskContext:
     return RiskContext(
         kill_switch=False,
         trade_mode=TradeMode.DRY_RUN,
+        required_trade_mode=TradeMode.DRY_RUN,
         account_id="account",
         expected_account_id="account",
         in_watchlist=True,

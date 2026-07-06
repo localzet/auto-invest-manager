@@ -4,6 +4,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from app.admin.errors import ResourceConflictError, ResourceNotFoundError
+from app.broker.dto import SandboxOrderRequest
 from app.broker.interface import BrokerProvider
 from app.core.config import Settings
 from app.execution.dto import ExecutionAllocation, PlannedOrderData, RiskContext
@@ -11,7 +12,7 @@ from app.execution.errors import RiskRejectedError
 from app.execution.planner import ExecutionPlanner
 from app.execution.repository import ExecutionRepository
 from app.execution.risk import RiskManager
-from app.models.entities import PlannedOrder, VirtualTrade
+from app.models.entities import ExecutionOrder, PlannedOrder, VirtualTrade
 from app.models.enums import (
     AllocationAction,
     OrderDirection,
@@ -21,7 +22,7 @@ from app.models.enums import (
 )
 
 
-class DryRunExecutionService:
+class ExecutionService:
     def __init__(
         self,
         repository: ExecutionRepository,
@@ -44,8 +45,10 @@ class DryRunExecutionService:
         risk = await self._repository.get_risk_profile()
         if system is None or risk is None:
             raise ResourceNotFoundError("System settings or risk profile are not seeded")
-        if system.trade_mode is not TradeMode.DRY_RUN:
-            raise ResourceConflictError("System trade mode must be DRY_RUN")
+        if system.trade_mode not in {TradeMode.DRY_RUN, TradeMode.SANDBOX}:
+            raise ResourceConflictError("System trade mode must be DRY_RUN or SANDBOX")
+        if system.trade_mode is TradeMode.SANDBOX:
+            self._ensure_sandbox_configuration()
 
         actionable = [
             allocation
@@ -80,7 +83,7 @@ class DryRunExecutionService:
             inputs,
             risk.default_order_type,
             risk.max_slippage_percent,
-            TradeMode.DRY_RUN,
+            system.trade_mode,
         )
         return await self._repository.save_orders(plan, data)
 
@@ -93,15 +96,53 @@ class DryRunExecutionService:
         if order.status is not PlannedOrderStatus.PLANNED:
             raise ResourceConflictError(f"Order cannot be executed from status {order.status}")
 
+        context = await self._build_risk_context(order, TradeMode.DRY_RUN)
+        decision = self._risk_manager.evaluate(self._to_data(order), context)
+        if not decision.allowed:
+            await self._repository.reject(order, decision.reasons)
+            raise RiskRejectedError(decision.reasons)
+        return await self._repository.simulate(order)
+
+    async def execute_sandbox(self, order_id: UUID) -> ExecutionOrder:
+        self._ensure_sandbox_configuration()
+        order = await self._repository.get_order(order_id)
+        if order is None:
+            raise ResourceNotFoundError("Planned order not found")
+        existing = await self._repository.get_execution_order(order.id)
+        if existing is not None:
+            return existing
+        if order.status is not PlannedOrderStatus.PLANNED:
+            raise ResourceConflictError(f"Order cannot be executed from status {order.status}")
+
+        context = await self._build_risk_context(order, TradeMode.SANDBOX)
+        decision = self._risk_manager.evaluate(self._to_data(order), context)
+        if not decision.allowed:
+            await self._repository.reject(order, decision.reasons)
+            raise RiskRejectedError(decision.reasons)
+        result = await self._broker.post_sandbox_order(
+            SandboxOrderRequest(
+                account_id=order.account_id,
+                instrument_uid=order.instrument.instrument_uid,
+                quantity_lots=order.lots,
+                direction=order.direction,
+                order_type=order.order_type,
+                price=order.limit_price,
+                order_id=order.idempotency_key,
+            )
+        )
+        return await self._repository.save_sandbox_execution(order, result)
+
+    async def _build_risk_context(
+        self, order: PlannedOrder, required_mode: TradeMode
+    ) -> RiskContext:
         system = await self._repository.get_settings()
         risk = await self._repository.get_risk_profile()
         watchlist = await self._repository.get_watchlist_item(order.instrument_id)
         if system is None or risk is None:
             raise ResourceNotFoundError("System settings or risk profile are not seeded")
         portfolio = await self._broker.get_portfolio(order.account_id)
-        prices = await self._broker.get_last_prices((order.instrument.instrument_uid,))
+        price = (await self._broker.get_last_prices((order.instrument.instrument_uid,)))[0]
         trading = await self._broker.get_trading_status(order.instrument.instrument_uid)
-        price = prices[0]
         position = next(
             (
                 item
@@ -114,11 +155,12 @@ class DryRunExecutionService:
             (item.quantity * item.current_price.amount for item in portfolio.positions),
             Decimal(0),
         )
-        latest_trade = await self._repository.latest_virtual_trade(order.instrument_id)
+        latest_trade_time = await self._repository.latest_trade_time(order.instrument_id)
         now = self._clock()
-        context = RiskContext(
+        return RiskContext(
             kill_switch=system.kill_switch,
             trade_mode=system.trade_mode,
+            required_trade_mode=required_mode,
             account_id=order.account_id,
             expected_account_id=portfolio.account_id,
             in_watchlist=watchlist is not None,
@@ -151,22 +193,26 @@ class DryRunExecutionService:
             portfolio_value=portfolio.total_amount.amount,
             max_position_weight=risk.max_position_weight,
             max_trade_amount=risk.max_trade_amount,
-            daily_trades=await self._repository.count_virtual_trades_since(
+            daily_trades=await self._repository.count_trades_since(
                 now.replace(hour=0, minute=0, second=0, microsecond=0)
             ),
             max_daily_trades=risk.max_daily_trades,
             cooldown_active=(
-                latest_trade is not None
-                and now - latest_trade.executed_at < timedelta(seconds=risk.trade_cooldown_seconds)
+                latest_trade_time is not None
+                and now - latest_trade_time < timedelta(seconds=risk.trade_cooldown_seconds)
             ),
             duplicate_active_order=await self._repository.has_duplicate_order(order),
             idempotency_key_exists=False,
         )
-        decision = self._risk_manager.evaluate(self._to_data(order), context)
-        if not decision.allowed:
-            await self._repository.reject(order, decision.reasons)
-            raise RiskRejectedError(decision.reasons)
-        return await self._repository.simulate(order)
+
+    def _ensure_sandbox_configuration(self) -> None:
+        if (
+            self._settings.broker_provider != "tinvest"
+            or self._settings.tinvest_target != "sandbox"
+        ):
+            raise ResourceConflictError(
+                "Sandbox execution requires BROKER_PROVIDER=tinvest and TINVEST_TARGET=sandbox"
+            )
 
     async def list_virtual_trades(self) -> list[VirtualTrade]:
         return await self._repository.list_virtual_trades()

@@ -243,3 +243,16 @@ class VirtualTradeResponse(ORMModel):
     price: Decimal
     total_amount: Decimal
     executed_at: datetime
+
+
+class ExecutionOrderResponse(ORMModel):
+    id: UUID
+    planned_order_id: UUID
+    broker_order_id: str
+    broker_status: str
+    lots_requested: int
+    lots_executed: int
+    execution_price: Decimal
+    total_amount: Decimal
+    trade_mode: TradeMode
+    created_at: datetime

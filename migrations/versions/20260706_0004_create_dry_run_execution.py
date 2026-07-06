@@ -21,6 +21,7 @@ status = postgresql.ENUM(
     "PLANNED",
     "RISK_REJECTED",
     "SIMULATED",
+    "SUBMITTED",
     "WAITING_CONFIRMATION",
     name="planned_order_status",
     create_type=False,
