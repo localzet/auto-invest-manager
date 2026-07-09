@@ -62,6 +62,9 @@ Admin API расположен под `/api/v1/admin` и требует заго
 - `GET /api/v1/admin/rebalance-plans`;
 - `POST /api/v1/admin/rebalance-plans/run`.
 - `POST /api/v1/admin/rebalance-plans/{plan_id}/execution-plan`;
+- `GET /api/v1/admin/planned-orders`;
+- `POST /api/v1/admin/planned-orders/{order_id}/approve`;
+- `POST /api/v1/admin/planned-orders/{order_id}/reject`;
 - `POST /api/v1/admin/planned-orders/{order_id}/dry-run`;
 - `POST /api/v1/admin/planned-orders/{order_id}/sandbox`;
 - `GET /api/v1/admin/virtual-trades`.
@@ -112,5 +115,9 @@ Sandbox executor доступен только при `BROKER_PROVIDER=tinvest`,
 имеет стабильный `order_id`, сохраняется вместе с broker response и не отправляется
 повторно при повторном вызове.
 
-Следующий этап: manual confirmation для real planned orders; реальные заявки
-останутся заблокированы `ENABLE_REAL_TRADING=false`.
+В режиме `REAL_MANUAL_CONFIRM` заявки создаются только в статусе
+`WAITING_CONFIRMATION`. Одобрение и отклонение сохраняются в audit log. Production
+order transport отсутствует в `BrokerProvider`, поэтому одобрение не может привести
+к реальной сделке. `ENABLE_REAL_TRADING=false` остаётся дополнительным env-барьером.
+
+Следующий этап: минимальная React admin UI.

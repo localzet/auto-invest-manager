@@ -22,6 +22,12 @@ from app.models.entities import (
 from app.models.enums import PlannedOrderStatus, TradeMode
 
 
+def initial_order_status(trade_mode: TradeMode) -> PlannedOrderStatus:
+    if trade_mode is TradeMode.REAL_MANUAL_CONFIRM:
+        return PlannedOrderStatus.WAITING_CONFIRMATION
+    return PlannedOrderStatus.PLANNED
+
+
 class ExecutionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -80,7 +86,7 @@ class ExecutionRepository:
                 order_type=item.order_type,
                 limit_price=item.limit_price,
                 reason=item.reason,
-                status=PlannedOrderStatus.PLANNED,
+                status=initial_order_status(item.trade_mode),
                 trade_mode=item.trade_mode,
                 idempotency_key=item.idempotency_key,
             )
@@ -106,6 +112,33 @@ class ExecutionRepository:
                 joinedload(PlannedOrder.virtual_trade).joinedload(VirtualTrade.instrument),
             )
         )
+
+    async def list_orders(self, limit: int = 100) -> list[PlannedOrder]:
+        result = await self._session.scalars(
+            select(PlannedOrder)
+            .options(joinedload(PlannedOrder.instrument))
+            .order_by(PlannedOrder.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.all())
+
+    async def set_confirmation_status(
+        self, order: PlannedOrder, status: PlannedOrderStatus
+    ) -> PlannedOrder:
+        order.status = status
+        self._session.add(
+            AuditLog(
+                event_type=f"order.{status.value.lower()}",
+                message=f"Real planned order {status.value.lower()}",
+                actor="admin",
+                context={
+                    "order_id": str(order.id),
+                    "idempotency_key": order.idempotency_key,
+                },
+            )
+        )
+        await self._session.commit()
+        return order
 
     async def count_trades_since(self, since: datetime) -> int:
         virtual_count = int(

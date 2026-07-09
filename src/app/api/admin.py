@@ -185,6 +185,27 @@ async def create_execution_plan(
     ]
 
 
+@router.get("/planned-orders", response_model=list[PlannedOrderResponse])
+async def get_planned_orders(
+    service: ExecutionServiceDependency,
+) -> list[PlannedOrderResponse]:
+    return [PlannedOrderResponse.model_validate(order) for order in await service.list_orders()]
+
+
+@router.post("/planned-orders/{order_id}/approve", response_model=PlannedOrderResponse)
+async def approve_planned_order(
+    order_id: UUID, service: ExecutionServiceDependency
+) -> PlannedOrderResponse:
+    return PlannedOrderResponse.model_validate(await service.approve(order_id))
+
+
+@router.post("/planned-orders/{order_id}/reject", response_model=PlannedOrderResponse)
+async def reject_planned_order(
+    order_id: UUID, service: ExecutionServiceDependency
+) -> PlannedOrderResponse:
+    return PlannedOrderResponse.model_validate(await service.reject(order_id))
+
+
 @router.post("/planned-orders/{order_id}/dry-run", response_model=VirtualTradeResponse)
 async def execute_dry_run(
     order_id: UUID, service: ExecutionServiceDependency

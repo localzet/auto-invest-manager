@@ -45,8 +45,15 @@ class ExecutionService:
         risk = await self._repository.get_risk_profile()
         if system is None or risk is None:
             raise ResourceNotFoundError("System settings or risk profile are not seeded")
-        if system.trade_mode not in {TradeMode.DRY_RUN, TradeMode.SANDBOX}:
-            raise ResourceConflictError("System trade mode must be DRY_RUN or SANDBOX")
+        allowed_modes = {
+            TradeMode.DRY_RUN,
+            TradeMode.SANDBOX,
+            TradeMode.REAL_MANUAL_CONFIRM,
+        }
+        if system.trade_mode not in allowed_modes:
+            raise ResourceConflictError(
+                "System trade mode must allow dry-run, sandbox or manual confirmation"
+            )
         if system.trade_mode is TradeMode.SANDBOX:
             self._ensure_sandbox_configuration()
 
@@ -216,6 +223,39 @@ class ExecutionService:
 
     async def list_virtual_trades(self) -> list[VirtualTrade]:
         return await self._repository.list_virtual_trades()
+
+    async def list_orders(self) -> list[PlannedOrder]:
+        return await self._repository.list_orders()
+
+    async def approve(self, order_id: UUID) -> PlannedOrder:
+        order = await self._get_manual_order(order_id)
+        if order.status is not PlannedOrderStatus.WAITING_CONFIRMATION:
+            raise ResourceConflictError(
+                f"Order cannot be approved from status {order.status.value}"
+            )
+        return await self._repository.set_confirmation_status(order, PlannedOrderStatus.APPROVED)
+
+    async def reject(self, order_id: UUID) -> PlannedOrder:
+        order = await self._get_manual_order(order_id)
+        if order.status not in {
+            PlannedOrderStatus.WAITING_CONFIRMATION,
+            PlannedOrderStatus.APPROVED,
+        }:
+            raise ResourceConflictError(
+                f"Order cannot be rejected from status {order.status.value}"
+            )
+        return await self._repository.set_confirmation_status(order, PlannedOrderStatus.REJECTED)
+
+    async def _get_manual_order(self, order_id: UUID) -> PlannedOrder:
+        order = await self._repository.get_order(order_id)
+        if order is None:
+            raise ResourceNotFoundError("Planned order not found")
+        if order.trade_mode is not TradeMode.REAL_MANUAL_CONFIRM:
+            raise ResourceConflictError("Order is not a real manual-confirmation order")
+        system = await self._repository.get_settings()
+        if system is None or system.trade_mode is not TradeMode.REAL_MANUAL_CONFIRM:
+            raise ResourceConflictError("System trade mode is not REAL_MANUAL_CONFIRM")
+        return order
 
     @staticmethod
     def _to_data(order: PlannedOrder) -> PlannedOrderData:
