@@ -23,6 +23,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import (
     AllocationAction,
+    AutomationRunStatus,
+    AutomationStep,
+    AutomationTrigger,
     OrderDirection,
     OrderType,
     PlannedOrderStatus,
@@ -371,4 +374,39 @@ class AuditLog(UUIDPrimaryKeyMixin, Base):
     context: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+
+class AutomationRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "automation_runs"
+    __table_args__ = (Index("ix_automation_runs_status_heartbeat", "status", "heartbeat_at"),)
+
+    trigger: Mapped[AutomationTrigger] = mapped_column(
+        Enum(AutomationTrigger, name="automation_trigger"), nullable=False
+    )
+    status: Mapped[AutomationRunStatus] = mapped_column(
+        Enum(AutomationRunStatus, name="automation_run_status"), nullable=False
+    )
+    trade_mode: Mapped[TradeMode] = mapped_column(
+        Enum(TradeMode, name="trade_mode", create_type=False), nullable=False
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    account_id: Mapped[str | None] = mapped_column(String(128))
+    correlation_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    current_step: Mapped[AutomationStep] = mapped_column(
+        Enum(AutomationStep, name="automation_step"), nullable=False
+    )
+    signals_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    rebalance_plan_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("rebalance_plans.id", ondelete="SET NULL")
+    )
+    planned_orders_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    executed_orders_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    virtual_trades_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    run_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, default=dict, nullable=False
     )

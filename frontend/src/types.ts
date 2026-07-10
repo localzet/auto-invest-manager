@@ -137,3 +137,34 @@ export interface AuditLog {
   context: Record<string, unknown>;
   created_at: string;
 }
+
+export interface AutomationRun {
+  id: string;
+  trigger: string;
+  status: string;
+  trade_mode: TradeMode;
+  started_at: string | null;
+  finished_at: string | null;
+  heartbeat_at: string | null;
+  current_step: string;
+  signals_count: number;
+  rebalance_plan_id: string | null;
+  planned_orders_count: number;
+  executed_orders_count: number;
+  virtual_trades_count: number;
+  error_code: string | null;
+  error_message: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationStatus {
+  scheduler_enabled: boolean;
+  trade_mode: TradeMode;
+  kill_switch: boolean;
+  worker_status: string;
+  scheduler_status: string;
+  running_runs: number;
+  last_run: AutomationRun | null;
+}

@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 from app.admin.errors import ResourceConflictError, ResourceNotFoundError
 from app.api.admin import router as admin_router
+from app.api.automation import router as automation_router
 from app.api.health import router as health_router
 from app.core.config import get_settings
 from app.execution.errors import RiskRejectedError
@@ -17,6 +18,7 @@ def create_app() -> FastAPI:
     )
     application.include_router(health_router)
     application.include_router(admin_router)
+    application.include_router(automation_router)
 
     @application.exception_handler(ResourceNotFoundError)
     async def handle_not_found(_: Request, error: ResourceNotFoundError) -> JSONResponse:

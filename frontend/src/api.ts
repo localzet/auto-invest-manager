@@ -1,5 +1,7 @@
 import type {
   AuditLog,
+  AutomationRun,
+  AutomationStatus,
   PlannedOrder,
   RebalancePlan,
   RiskProfile,
@@ -80,4 +82,11 @@ export class AdminApi {
   rejectOrder = (id: string) =>
     this.request<PlannedOrder>(`/planned-orders/${id}/reject`, { method: "POST" });
   auditLogs = () => this.request<AuditLog[]>("/audit-logs");
+  automationRuns = () => this.request<AutomationRun[]>("/automation/runs");
+  automationStatus = () => this.request<AutomationStatus>("/automation/status");
+  runAutomation = (idempotencyKey: string) =>
+    this.request<AutomationRun>("/automation/run", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+    });
 }

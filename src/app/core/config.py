@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr | None = None
     telegram_chat_id: str | None = None
     telegram_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    automation_scheduler_enabled: bool = False
+    automation_cycle_interval_seconds: int = Field(default=900, ge=60)
+    automation_cycle_jitter_seconds: int = Field(default=30, ge=0, le=300)
+    automation_lock_ttl_seconds: int = Field(default=1800, ge=60)
+    automation_run_timeout_seconds: int = Field(default=600, ge=30)
+    account_sync_interval_seconds: int = Field(default=300, ge=60)
+    instrument_sync_interval_seconds: int = Field(default=86400, ge=300)
+    stale_run_threshold_seconds: int = Field(default=1200, ge=60)
+    broker_retry_max_attempts: int = Field(default=3, ge=1, le=10)
+    broker_retry_base_delay_seconds: float = Field(default=1.0, gt=0, le=10)
+    broker_retry_max_delay_seconds: float = Field(default=20.0, gt=0, le=60)
 
     @model_validator(mode="after")
     def validate_telegram_configuration(self) -> "Settings":

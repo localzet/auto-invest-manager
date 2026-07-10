@@ -40,6 +40,45 @@ TELEGRAM_TIMEOUT_SECONDS=5
 ручной заявке. Ошибка Telegram записывается в application log, но не откатывает
 успешно сохранённую бизнес-операцию.
 
+## Worker и scheduler
+
+Worker запускается командой `arq app.automation.worker.WorkerSettings`, scheduler —
+`python -m app.automation.scheduler`. В Docker Compose они оформлены отдельными
+не-root контейнерами и используют один image backend. Миграции выполняет только
+одноразовый сервис `migrate`.
+
+Scheduler безопасно выключен по умолчанию:
+
+```dotenv
+AUTOMATION_SCHEDULER_ENABLED=false
+AUTOMATION_CYCLE_INTERVAL_SECONDS=900
+AUTOMATION_CYCLE_JITTER_SECONDS=30
+AUTOMATION_LOCK_TTL_SECONDS=1800
+AUTOMATION_RUN_TIMEOUT_SECONDS=600
+ACCOUNT_SYNC_INTERVAL_SECONDS=300
+INSTRUMENT_SYNC_INTERVAL_SECONDS=86400
+STALE_RUN_THRESHOLD_SECONDS=1200
+```
+
+Интервал меньше 60 секунд отклоняется конфигурацией. Время runs, heartbeat и bucket
+вычисляется в UTC. Периодический cycle синхронизирует счёт/портфель, обновляет market
+data через существующий signal service, строит план и исполняет только DRY_RUN или
+SANDBOX. `REAL_MANUAL_CONFIRM` создаёт только ожидающие подтверждения заявки.
+
+Ручной запуск асинхронно ставится в очередь:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8000/api/v1/admin/automation/run `
+  -Headers @{"X-Admin-API-Key"=$env:ADMIN_API_KEY; "Idempotency-Key"="incident-001"}
+```
+
+Статус: `/api/v1/admin/automation/status`, история:
+`/api/v1/admin/automation/runs`. Повторный idempotency key возвращает существующий
+run. Lock `automation-cycle:{account_id}` берётся атомарно с TTL и удаляется Lua
+скриптом только при совпадении owner token. Зависшие RUNNING runs при старте worker
+получают `FAILED/stale_worker_run`; чужой lock не удаляется и освобождается по TTL.
+
 ## Инциденты
 
 ### Немедленная остановка исполнения

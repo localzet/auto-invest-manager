@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
+from importlib.util import find_spec
 from typing import Any
 
 from app.broker.dto import (
@@ -47,6 +48,10 @@ class TInvestClient:
     ) -> None:
         if not token:
             raise BrokerConfigurationError("T-Invest token is required")
+        if client_factory is _sdk_client and find_spec("tinkoff.invest") is None:
+            raise BrokerConfigurationError(
+                "T-Invest SDK is not installed; install the project with the tinvest extra"
+            )
         self._token = token
         self._target = target
         self._client_factory = client_factory

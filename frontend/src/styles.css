@@ -126,6 +126,8 @@ input:focus, select:focus { border-color: #789a52; box-shadow: 0 0 0 3px rgba(18
 .timeline__meta time { margin-left: auto; }
 .timeline article p { margin-bottom: 8px; color: var(--muted); font-size: 10px; }
 .timeline pre { max-height: 140px; margin: 8px 0 0; padding: 10px; overflow: auto; border-radius: 5px; color: #8fa098; background: #0c1310; font-size: 9px; }
+.automation-details > div:last-child { padding: 22px; }
+.automation-details pre { max-height: 320px; padding: 14px; overflow: auto; border-radius: 7px; color: #9eb0a7; background: #0c1310; font-size: 10px; }
 
 .safety-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .safety-card { padding: 26px; }

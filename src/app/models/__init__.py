@@ -1,5 +1,6 @@
 from app.models.entities import (
     AuditLog,
+    AutomationRun,
     BrokerAccount,
     CashSnapshot,
     ExecutionOrder,
@@ -22,6 +23,7 @@ from app.models.entities import (
 
 __all__ = [
     "AuditLog",
+    "AutomationRun",
     "BrokerAccount",
     "CashSnapshot",
     "ExecutionOrder",

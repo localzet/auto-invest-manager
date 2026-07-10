@@ -2,6 +2,8 @@ import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 
 import { AdminApi } from "./api";
 import type {
   AuditLog,
+  AutomationRun,
+  AutomationStatus,
   PlannedOrder,
   RebalancePlan,
   RiskProfile,
@@ -12,10 +14,11 @@ import type {
   WatchlistItem,
 } from "./types";
 
-type Page = "dashboard" | "watchlist" | "risk" | "strategy" | "rebalance" | "audit" | "safety";
+type Page = "dashboard" | "automation" | "watchlist" | "risk" | "strategy" | "rebalance" | "audit" | "safety";
 
 const NAVIGATION: Array<{ id: Page; label: string; icon: string }> = [
   { id: "dashboard", label: "Обзор", icon: "◫" },
+  { id: "automation", label: "Automation", icon: "↻" },
   { id: "watchlist", label: "Watchlist", icon: "◎" },
   { id: "risk", label: "Риск-профиль", icon: "◇" },
   { id: "strategy", label: "Стратегия", icon: "⌁" },
@@ -338,6 +341,50 @@ function Rebalance({ api }: { api: AdminApi }) {
   </PageLayout>;
 }
 
+function Automation({ api }: { api: AdminApi }) {
+  const [status, setStatus] = useState<AutomationStatus>();
+  const [runs, setRuns] = useState<AutomationRun[]>([]);
+  const [selected, setSelected] = useState<AutomationRun>();
+  const [error, setError] = useState("");
+  const [starting, setStarting] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const [nextStatus, nextRuns] = await Promise.all([
+        api.automationStatus(), api.automationRuns(),
+      ]);
+      setStatus(nextStatus); setRuns(nextRuns); setError("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Ошибка загрузки automation");
+    }
+  }, [api]);
+  useEffect(() => void load(), [load]);
+
+  async function start() {
+    setStarting(true);
+    try {
+      await api.runAutomation(crypto.randomUUID());
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Не удалось поставить запуск в очередь");
+    } finally { setStarting(false); }
+  }
+
+  return <PageLayout title="Automation" subtitle="Фоновые циклы, worker и scheduler">
+    <Notice error={error} />
+    <div className="metrics">
+      <Metric label="Scheduler" value={status?.scheduler_enabled ? "ENABLED" : "DISABLED"} detail={status?.scheduler_status ?? "—"} />
+      <Metric label="Worker" value={status?.worker_status?.toUpperCase() ?? "—"} detail={`${status?.running_runs ?? 0} активных запусков`} />
+      <Metric label="Trade mode" value={status?.trade_mode ?? "—"} detail={status?.kill_switch ? "Kill switch включён" : "Safety check активен"} />
+      <Metric label="Последний run" value={status?.last_run?.status ?? "—"} detail={status?.last_run?.finished_at ? formatDate(status.last_run.finished_at) : "Нет завершённых"} />
+    </div>
+    <div className="toolbar"><button className="button button--primary" disabled={starting} onClick={() => void start()}>{starting ? "Постановка…" : "Запустить вручную"}</button><button className="button" onClick={() => void load()}>Обновить</button></div>
+    <section className="panel"><div className="panel-heading"><div><p className="eyebrow">ORCHESTRATION RUNS</p><h2>Последние запуски</h2></div></div>
+      {runs.length ? <div className="table-wrap"><table><thead><tr><th>Trigger</th><th>Status</th><th>Шаг</th><th>Сигналы</th><th>Заявки</th><th>Время</th><th></th></tr></thead><tbody>{runs.map((run) => <tr key={run.id}><td>{run.trigger}</td><td><Status value={run.status} /></td><td><code>{run.current_step}</code></td><td>{run.signals_count}</td><td>{run.planned_orders_count} / {run.executed_orders_count + run.virtual_trades_count}</td><td>{run.started_at ? formatDate(run.started_at) : "В очереди"}</td><td><button className="button button--small" onClick={() => setSelected(run)}>Детали</button></td></tr>)}</tbody></table></div> : <Empty>Запусков пока нет.</Empty>}
+    </section>
+    {selected && <section className="panel automation-details"><div className="panel-heading"><div><p className="eyebrow">RUN DETAILS</p><h2>{selected.id}</h2></div><button className="button button--small" onClick={() => setSelected(undefined)}>Закрыть</button></div><div><p><Status value={selected.status} /> · {selected.current_step}</p>{selected.error_message && <Notice error={`${selected.error_code}: ${selected.error_message}`} />}<pre>{JSON.stringify(selected.metadata, null, 2)}</pre></div></section>}
+  </PageLayout>;
+}
+
 function Audit({ api }: { api: AdminApi }) {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [error, setError] = useState("");
@@ -380,6 +427,7 @@ export function App() {
 
   const pages: Record<Page, ReactNode> = {
     dashboard: <Dashboard api={api} />,
+    automation: <Automation api={api} />,
     watchlist: <Watchlist api={api} />,
     risk: <ProfilePage api={api} kind="risk" />,
     strategy: <ProfilePage api={api} kind="strategy" />,
