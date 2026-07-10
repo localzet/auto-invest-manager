@@ -1,14 +1,14 @@
 # Auto Invest Manager
 
-Безопасный каркас рекомендательно-торговой системы для T-Invest API. Текущая
-итерация реализует этапы 1–2: инфраструктуру backend, базовую схему данных,
-healthcheck и абстракцию получения данных T-Invest с детерминированным mock provider.
-Исполнение заявок пока отсутствует.
+Безопасная рекомендательно-торговая система для T-Invest API с FastAPI backend и
+React admin UI. Реализованы получение рыночных данных, baseline-сигналы,
+long-only оптимизация, dry-run, sandbox и ручное подтверждение заявок. Отправка
+реальных заявок физически отсутствует.
 
 ## Требования
 
 - Docker 24+ с Docker Compose;
-- либо Python 3.12 и доступные PostgreSQL 16 / Redis 7.
+- либо Python 3.12, Node.js 22 и доступные PostgreSQL 16 / Redis 7.
 
 ## Запуск через Docker
 
@@ -21,6 +21,8 @@ docker compose up --build
 
 Миграции выполняются отдельным одноразовым сервисом `migrate` до старта API.
 OpenAPI доступен по адресу <http://localhost:8000/docs>.
+Admin UI доступен по адресу <http://localhost:3000>. При первом входе он запросит
+значение `ADMIN_API_KEY`; ключ хранится только в `sessionStorage` текущей вкладки.
 
 По умолчанию используется `BROKER_PROVIDER=mock`, поэтому токен не нужен. Для API
 установите `BROKER_PROVIDER=tinvest`, выберите `TINVEST_TARGET=prod|sandbox` и задайте
@@ -35,7 +37,15 @@ pip install -e ".[dev]"
 Copy-Item .env.example .env
 alembic upgrade head
 uvicorn app.main:app --reload
+
+# В отдельном терминале:
+cd frontend
+npm install
+npm run dev
 ```
+
+Vite UI доступен по адресу <http://localhost:5173> и проксирует `/api` в локальный
+backend на порту 8000.
 
 ## Endpoints
 
@@ -57,6 +67,7 @@ Admin API расположен под `/api/v1/admin` и требует заго
 - `PATCH|DELETE /api/v1/admin/watchlist/{item_id}`;
 - `GET|PATCH /api/v1/admin/risk-profile`;
 - `GET|PATCH /api/v1/admin/strategy-profile`.
+- `GET /api/v1/admin/audit-logs`;
 - `GET /api/v1/admin/signals`;
 - `POST /api/v1/admin/analysis/run`.
 - `GET /api/v1/admin/rebalance-plans`;
@@ -87,13 +98,13 @@ pytest
 `ENABLE_REAL_TRADING=false` и `GLOBAL_KILL_SWITCH=true` являются безопасными
 значениями по умолчанию. На этапе 1 код отправки заявок отсутствует физически.
 
-## Границы этапа 1
+## Admin UI
 
-Созданы базовые модели для настроек, счетов, инструментов, watchlist, risk/strategy
-profiles, снимков портфеля, рыночных данных и audit log. Таблицы торгового контура
-(signals, планы, заявки и virtual trades) будут добавляться вместе с соответствующей
-бизнес-логикой, чтобы миграции отражали реальные инварианты, а не преждевременные
-предположения.
+Интерфейс включает Dashboard, Watchlist, Risk Profile, Strategy Profile,
+Rebalance Plans, Planned Orders, Audit Logs и Safety. Из UI можно запускать анализ
+и планирование, формировать заявки и вручную одобрять/отклонять заявки режима
+`REAL_MANUAL_CONFIRM`. Одобрение меняет только состояние заявки и не отправляет её
+брокеру.
 
 Signal Engine v1 использует 20 завершённых свечей и рассчитывает trend, moving
 average, volatility, volume и drawdown scores. Итоговая рекомендация принимает
@@ -120,4 +131,5 @@ Sandbox executor доступен только при `BROKER_PROVIDER=tinvest`,
 order transport отсутствует в `BrokerProvider`, поэтому одобрение не может привести
 к реальной сделке. `ENABLE_REAL_TRADING=false` остаётся дополнительным env-барьером.
 
-Следующий этап: минимальная React admin UI.
+Следующий этап: расширение автоматических тестов, эксплуатационной документации и
+Telegram-уведомления.

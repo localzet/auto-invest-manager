@@ -256,3 +256,13 @@ class ExecutionOrderResponse(ORMModel):
     total_amount: Decimal
     trade_mode: TradeMode
     created_at: datetime
+
+
+class AuditLogResponse(ORMModel):
+    id: UUID
+    event_type: str
+    severity: str
+    actor: str
+    message: str
+    context: dict[str, object]
+    created_at: datetime

@@ -23,6 +23,19 @@ class FakeAdminService:
             updated_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
+    async def list_audit_logs(self) -> list[SimpleNamespace]:
+        return [
+            SimpleNamespace(
+                id=UUID("00000000-0000-0000-0000-000000000002"),
+                event_type="order.approved",
+                severity="info",
+                actor="admin",
+                message="Planned order approved",
+                context={"ticker": "MOEX"},
+                created_at=datetime(2026, 1, 2, tzinfo=UTC),
+            )
+        ]
+
 
 def create_admin_client() -> TestClient:
     app = create_app()
@@ -52,3 +65,13 @@ def test_admin_api_returns_settings_without_exposing_secrets() -> None:
         "updated_at": "2026-01-01T00:00:00Z",
         "real_trading_enabled_by_env": False,
     }
+
+
+def test_admin_api_returns_audit_logs() -> None:
+    response = create_admin_client().get(
+        "/api/v1/admin/audit-logs", headers={"X-Admin-API-Key": ADMIN_KEY}
+    )
+
+    assert response.status_code == 200
+    assert response.json()[0]["event_type"] == "order.approved"
+    assert response.json()[0]["context"] == {"ticker": "MOEX"}

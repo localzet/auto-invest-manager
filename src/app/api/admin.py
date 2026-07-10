@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Response, status
 from app.admin.schemas import (
     AccountsResponse,
     AnalysisRunResponse,
+    AuditLogResponse,
     ExecutionOrderResponse,
     InstrumentResponse,
     InstrumentSyncRequest,
@@ -65,6 +66,11 @@ def _settings_response(
 @router.get("/accounts", response_model=AccountsResponse)
 async def get_accounts(service: AdminServiceDependency) -> AccountsResponse:
     return AccountsResponse(accounts=await service.get_accounts())
+
+
+@router.get("/audit-logs", response_model=list[AuditLogResponse])
+async def get_audit_logs(service: AdminServiceDependency) -> list[AuditLogResponse]:
+    return [AuditLogResponse.model_validate(item) for item in await service.list_audit_logs()]
 
 
 @router.get("/settings", response_model=SystemSettingsResponse)

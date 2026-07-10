@@ -16,6 +16,7 @@ from app.broker.dto import BrokerAccountData
 from app.broker.interface import BrokerProvider
 from app.core.config import Settings
 from app.models.entities import (
+    AuditLog,
     Instrument,
     RiskProfile,
     StrategyProfile,
@@ -41,6 +42,9 @@ class AdminService:
 
     async def get_accounts(self) -> tuple[BrokerAccountData, ...]:
         return await self._broker.get_accounts()
+
+    async def list_audit_logs(self) -> list[AuditLog]:
+        return list(await self._repository.list_audit_logs())
 
     async def get_system_settings(self) -> SystemSettings:
         value = await self._repository.get_system_settings()

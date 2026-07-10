@@ -57,6 +57,12 @@ class AdminRepository:
             )
         )
 
+    async def list_audit_logs(self, limit: int = 100) -> Sequence[AuditLog]:
+        result = await self._session.scalars(
+            select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
+        )
+        return result.all()
+
     async def upsert_instrument(self, data: InstrumentData) -> Instrument:
         instrument = await self._session.scalar(
             select(Instrument).where(Instrument.instrument_uid == data.instrument_uid)
