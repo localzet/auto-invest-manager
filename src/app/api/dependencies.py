@@ -10,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.execution.repository import ExecutionRepository
 from app.execution.service import ExecutionService
+from app.notifications.factory import create_notifier
 from app.portfolio.repository import PortfolioRepository
 from app.portfolio.service import RebalanceService
 from app.signals.repository import SignalRepository
@@ -30,6 +31,7 @@ def get_signal_service(
     return SignalAnalysisService(
         SignalRepository(session),
         create_broker_provider(settings),
+        notifier=create_notifier(settings),
     )
 
 
@@ -41,6 +43,7 @@ def get_rebalance_service(
         PortfolioRepository(session),
         create_broker_provider(settings),
         settings,
+        notifier=create_notifier(settings),
     )
 
 
@@ -52,4 +55,5 @@ def get_execution_service(
         ExecutionRepository(session),
         create_broker_provider(settings),
         settings,
+        notifier=create_notifier(settings),
     )

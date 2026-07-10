@@ -34,9 +34,17 @@ async def test_admin_can_approve_waiting_manual_order() -> None:
         ),
         set_confirmation_status=AsyncMock(return_value=approved),
     )
-    service = ExecutionService(repository, MockBrokerProvider(), Settings(_env_file=None))
+    notifier = SimpleNamespace(send=AsyncMock())
+    service = ExecutionService(
+        repository,
+        MockBrokerProvider(),
+        Settings(_env_file=None),
+        notifier=notifier,
+    )
 
     result = await service.approve(order.id)
 
     assert result is approved
     repository.set_confirmation_status.assert_awaited_once_with(order, PlannedOrderStatus.APPROVED)
+    notifier.send.assert_awaited_once()
+    assert "не выполнялась" in notifier.send.await_args.args[0].message

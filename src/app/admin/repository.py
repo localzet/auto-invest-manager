@@ -98,7 +98,14 @@ class AdminRepository:
         await self._session.delete(entity)
 
     def add_audit(self, event_type: str, message: str, context: dict[str, Any]) -> None:
-        self._session.add(AuditLog(event_type=event_type, message=message, context=context))
+        self._session.add(
+            AuditLog(
+                event_type=event_type,
+                message=message,
+                actor="admin",
+                context=context,
+            )
+        )
 
     @staticmethod
     def apply_changes(entity: object, values: Mapping[str, Any]) -> None:

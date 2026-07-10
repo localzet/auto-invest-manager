@@ -20,6 +20,9 @@ from app.models.enums import (
     PlannedOrderStatus,
     TradeMode,
 )
+from app.notifications.dto import Notification, NotificationSeverity
+from app.notifications.interface import Notifier
+from app.notifications.service import NullNotifier
 
 
 class ExecutionService:
@@ -29,10 +32,12 @@ class ExecutionService:
         broker: BrokerProvider,
         settings: Settings,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        notifier: Notifier | None = None,
     ) -> None:
         self._repository = repository
         self._broker = broker
         self._settings = settings
+        self._notifier = notifier or NullNotifier()
         self._clock = clock
         self._planner = ExecutionPlanner()
         self._risk_manager = RiskManager()
@@ -233,7 +238,17 @@ class ExecutionService:
             raise ResourceConflictError(
                 f"Order cannot be approved from status {order.status.value}"
             )
-        return await self._repository.set_confirmation_status(order, PlannedOrderStatus.APPROVED)
+        approved = await self._repository.set_confirmation_status(
+            order, PlannedOrderStatus.APPROVED
+        )
+        await self._notifier.send(
+            Notification(
+                title="Заявка одобрена",
+                message=f"Заявка {order.id} одобрена вручную. Отправка брокеру не выполнялась.",
+                severity=NotificationSeverity.WARNING,
+            )
+        )
+        return approved
 
     async def reject(self, order_id: UUID) -> PlannedOrder:
         order = await self._get_manual_order(order_id)
@@ -244,7 +259,17 @@ class ExecutionService:
             raise ResourceConflictError(
                 f"Order cannot be rejected from status {order.status.value}"
             )
-        return await self._repository.set_confirmation_status(order, PlannedOrderStatus.REJECTED)
+        rejected = await self._repository.set_confirmation_status(
+            order, PlannedOrderStatus.REJECTED
+        )
+        await self._notifier.send(
+            Notification(
+                title="Заявка отклонена",
+                message=f"Заявка {order.id} отклонена вручную.",
+                severity=NotificationSeverity.WARNING,
+            )
+        )
+        return rejected
 
     async def _get_manual_order(self, order_id: UUID) -> PlannedOrder:
         order = await self._repository.get_order(order_id)

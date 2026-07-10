@@ -36,10 +36,12 @@ async def test_service_builds_lot_aware_plan_from_latest_signal() -> None:
         get_latest_signal=AsyncMock(return_value=SimpleNamespace(final_score=Decimal("0.80"))),
         save_plan=AsyncMock(return_value="saved-plan"),
     )
+    notifier = SimpleNamespace(send=AsyncMock())
     service = RebalanceService(
         repository,
         MockBrokerProvider(),
         Settings(_env_file=None),
+        notifier=notifier,
     )
 
     result = await service.create_plan()
@@ -48,3 +50,4 @@ async def test_service_builds_lot_aware_plan_from_latest_signal() -> None:
     rebalance = repository.save_plan.await_args.args[3]
     assert rebalance.allocations[0].action is AllocationAction.BUY
     assert rebalance.allocations[0].lots == 6
+    notifier.send.assert_awaited_once()

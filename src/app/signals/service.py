@@ -5,6 +5,9 @@ from app.admin.errors import ResourceNotFoundError
 from app.broker.dto import CandleInterval
 from app.broker.interface import BrokerProvider
 from app.models.entities import Signal
+from app.notifications.dto import Notification
+from app.notifications.interface import Notifier
+from app.notifications.service import NullNotifier
 from app.signals.engine import BaselineSignalEngine
 from app.signals.errors import SignalCalculationError
 from app.signals.interface import SignalEngine
@@ -18,10 +21,12 @@ class SignalAnalysisService:
         broker: BrokerProvider,
         engine: SignalEngine | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        notifier: Notifier | None = None,
     ) -> None:
         self._repository = repository
         self._broker = broker
         self._engine = engine or BaselineSignalEngine(clock=clock)
+        self._notifier = notifier or NullNotifier()
         self._clock = clock
 
     async def run(self) -> Sequence[Signal]:
@@ -55,6 +60,12 @@ class SignalAnalysisService:
 
         self._repository.add_audit(len(signals), signals[0].model_version)
         await self._repository.commit()
+        await self._notifier.send(
+            Notification(
+                title="Анализ рынка завершён",
+                message=f"Рассчитано сигналов: {len(signals)}. Модель: {signals[0].model_version}.",
+            )
+        )
         return signals
 
     async def latest(self, limit: int = 100) -> Sequence[Signal]:

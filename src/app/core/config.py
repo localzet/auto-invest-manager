@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +29,21 @@ class Settings(BaseSettings):
     tinvest_target: Literal["prod", "sandbox"] = "sandbox"
     admin_api_key: Annotated[SecretStr, Field(min_length=32)] | None = None
     market_price_max_age_seconds: int = Field(default=60, gt=0, le=3600)
+    telegram_notifications_enabled: bool = False
+    telegram_bot_token: SecretStr | None = None
+    telegram_chat_id: str | None = None
+    telegram_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+
+    @model_validator(mode="after")
+    def validate_telegram_configuration(self) -> "Settings":
+        if self.telegram_notifications_enabled and (
+            self.telegram_bot_token is None or not self.telegram_chat_id
+        ):
+            raise ValueError(
+                "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required "
+                "when notifications are enabled"
+            )
+        return self
 
 
 @lru_cache

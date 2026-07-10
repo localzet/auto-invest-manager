@@ -4,6 +4,10 @@ from app.admin.errors import ResourceNotFoundError
 from app.broker.interface import BrokerProvider
 from app.core.config import Settings
 from app.models.entities import Instrument, RebalancePlan
+from app.models.enums import AllocationAction
+from app.notifications.dto import Notification
+from app.notifications.interface import Notifier
+from app.notifications.service import NullNotifier
 from app.portfolio.dto import AssetInput, OptimizationConstraints
 from app.portfolio.optimizer import PortfolioOptimizer
 from app.portfolio.planner import RebalancePlanner
@@ -16,10 +20,12 @@ class RebalanceService:
         repository: PortfolioRepository,
         broker: BrokerProvider,
         settings: Settings,
+        notifier: Notifier | None = None,
     ) -> None:
         self._repository = repository
         self._broker = broker
         self._settings = settings
+        self._notifier = notifier or NullNotifier()
         self._optimizer = PortfolioOptimizer()
         self._planner = RebalancePlanner()
 
@@ -92,13 +98,27 @@ class RebalanceService:
             portfolio.total_amount.amount,
             cash,
         )
-        return await self._repository.save_plan(
+        plan = await self._repository.save_plan(
             account_id,
             portfolio.total_amount.amount,
             cash,
             result,
             instrument_map,
         )
+        actionable_count = sum(
+            allocation.action in {AllocationAction.BUY, AllocationAction.SELL}
+            for allocation in result.allocations
+        )
+        await self._notifier.send(
+            Notification(
+                title="План ребалансировки создан",
+                message=(
+                    f"Счёт: {account_id}. Стоимость: {portfolio.total_amount.amount}. "
+                    f"Действий: {actionable_count}."
+                ),
+            )
+        )
+        return plan
 
     async def list_plans(self) -> list[RebalancePlan]:
         return list(await self._repository.list_plans())

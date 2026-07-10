@@ -19,6 +19,7 @@ async def test_analysis_persists_signal_and_audit_atomically() -> None:
         min_signal_score=Decimal("0.60"),
     )
     saved = SimpleNamespace(model_version="baseline-v1")
+    notifier = SimpleNamespace(send=AsyncMock())
     repository = SimpleNamespace(
         get_strategy=AsyncMock(
             return_value=SimpleNamespace(
@@ -34,6 +35,7 @@ async def test_analysis_persists_signal_and_audit_atomically() -> None:
     service = SignalAnalysisService(
         repository,
         MockBrokerProvider(),
+        notifier=notifier,
         clock=lambda: datetime(2026, 1, 5, 12, tzinfo=UTC),
     )
 
@@ -43,3 +45,5 @@ async def test_analysis_persists_signal_and_audit_atomically() -> None:
     repository.save.assert_awaited_once()
     repository.add_audit.assert_called_once_with(1, "baseline-v1")
     repository.commit.assert_awaited_once()
+    notifier.send.assert_awaited_once()
+    assert notifier.send.await_args.args[0].title == "Анализ рынка завершён"
