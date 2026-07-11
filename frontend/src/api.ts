@@ -2,11 +2,15 @@ import type {
   AuditLog,
   AutomationRun,
   AutomationStatus,
+  AccountEventRecord,
+  BrokerStreamEventRecord,
   PlannedOrder,
   RebalancePlan,
+  ReconciliationRecord,
   RiskProfile,
   Signal,
   StrategyProfile,
+  StreamsStatus,
   SystemSettings,
   WatchlistItem,
 } from "./types";
@@ -88,5 +92,15 @@ export class AdminApi {
     this.request<AutomationRun>("/automation/run", {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
+    });
+  streamsStatus = () => this.request<StreamsStatus>("/streams/status");
+  streamEvents = () => this.request<BrokerStreamEventRecord[]>("/streams/events");
+  accountEvents = () => this.request<AccountEventRecord[]>("/account-events");
+  reconciliations = () => this.request<ReconciliationRecord[]>("/reconciliations");
+  retryStreamEvent = (id: string) =>
+    this.request<BrokerStreamEventRecord>(`/streams/events/${id}/retry`, { method: "POST" });
+  reconcileAccount = (accountId: string) =>
+    this.request<{ status: string }>(`/accounts/${encodeURIComponent(accountId)}/reconcile`, {
+      method: "POST",
     });
 }

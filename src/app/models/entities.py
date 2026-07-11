@@ -22,17 +22,23 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import (
+    AccountEventType,
     AllocationAction,
     AutomationRunStatus,
     AutomationStep,
     AutomationTrigger,
+    BrokerStreamEventKind,
+    BrokerStreamStatus,
+    BrokerStreamType,
     OrderDirection,
     OrderType,
     PlannedOrderStatus,
     RebalanceMode,
     RebalancePlanStatus,
+    ReconciliationStatus,
     RiskMode,
     SignalRecommendation,
+    StreamEventProcessingStatus,
     TradeMode,
 )
 
@@ -410,3 +416,116 @@ class AutomationRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     run_metadata: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSONB, default=dict, nullable=False
     )
+
+
+class BrokerStreamEventRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "broker_stream_events"
+    __table_args__ = (
+        UniqueConstraint("dedupe_key"),
+        Index("ix_broker_stream_events_processing", "processing_status", "next_attempt_at"),
+    )
+
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    target: Mapped[str] = mapped_column(String(128), nullable=False)
+    stream_type: Mapped[BrokerStreamType] = mapped_column(
+        Enum(BrokerStreamType, name="broker_stream_type"), nullable=False
+    )
+    event_kind: Mapped[BrokerStreamEventKind] = mapped_column(
+        Enum(BrokerStreamEventKind, name="broker_stream_event_kind"), nullable=False
+    )
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    broker_event_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_event_id: Mapped[str | None] = mapped_column(String(255))
+    dedupe_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    processing_status: Mapped[StreamEventProcessingStatus] = mapped_column(
+        Enum(StreamEventProcessingStatus, name="stream_event_processing_status"),
+        nullable=False,
+    )
+    processing_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    correlation_id: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+class BrokerStreamState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "broker_stream_states"
+    __table_args__ = (UniqueConstraint("provider", "target", "stream_type", "account_set_hash"),)
+
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    target: Mapped[str] = mapped_column(String(128), nullable=False)
+    stream_type: Mapped[BrokerStreamType] = mapped_column(
+        Enum(BrokerStreamType, name="broker_stream_type", create_type=False), nullable=False
+    )
+    account_set_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[BrokerStreamStatus] = mapped_column(
+        Enum(BrokerStreamStatus, name="broker_stream_status"), nullable=False
+    )
+    instance_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    disconnected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_ping_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reconnect_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
+    last_error_message: Mapped[str | None] = mapped_column(Text)
+    next_reconnect_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    subscription_status: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+
+
+class BrokerOperationCursor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "broker_operation_cursors"
+    __table_args__ = (UniqueConstraint("account_id", "provider", "target"),)
+
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    target: Mapped[str] = mapped_column(String(128), nullable=False)
+    cursor: Mapped[str | None] = mapped_column(String(512))
+    last_operation_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_successful_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_operation_fingerprint: Mapped[str | None] = mapped_column(String(64))
+
+
+class AccountEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "account_events"
+    __table_args__ = (UniqueConstraint("fingerprint"),)
+
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    event_type: Mapped[AccountEventType] = mapped_column(
+        Enum(AccountEventType, name="account_event_type"), nullable=False
+    )
+    operation_id: Mapped[str | None] = mapped_column(String(128))
+    operation_type: Mapped[str | None] = mapped_column(String(128))
+    amount: Mapped[Decimal | None] = mapped_column(MONEY)
+    currency: Mapped[str | None] = mapped_column(String(8))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    event_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, default=dict, nullable=False
+    )
+
+
+class AccountReconciliation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "account_reconciliations"
+
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[ReconciliationStatus] = mapped_column(
+        Enum(ReconciliationStatus, name="reconciliation_status"), nullable=False
+    )
+    reasons: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    operations_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    account_events_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    automation_run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("automation_runs.id", ondelete="SET NULL")
+    )
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)

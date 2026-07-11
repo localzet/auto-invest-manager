@@ -1,14 +1,19 @@
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from app.broker.dto import (
     BrokerAccountData,
+    BrokerCapabilities,
+    BrokerOperation,
+    BrokerStreamEvent,
     CandleData,
     CandleInterval,
     InstrumentData,
     LastPriceData,
     MoneyData,
+    OperationsCursorPage,
+    OperationsCursorRequest,
     PortfolioData,
     PositionData,
     SandboxOrderRequest,
@@ -51,6 +56,16 @@ class MockBrokerProvider:
             "mock-sber-uid": Decimal("312.50"),
             "mock-ydex-uid": Decimal("4210.00"),
         }
+        self._stream_events: dict[str, list[BrokerStreamEvent]] = {
+            "PORTFOLIO": [],
+            "POSITIONS": [],
+            "TRADES": [],
+        }
+        self._operations: list[BrokerOperation] = []
+
+    @property
+    def capabilities(self) -> BrokerCapabilities:
+        return BrokerCapabilities(True, True, True, True)
 
     async def get_accounts(self) -> tuple[BrokerAccountData, ...]:
         return (
@@ -81,6 +96,9 @@ class MockBrokerProvider:
             ),
             captured_at=self._clock(),
         )
+
+    async def get_positions(self, account_id: str) -> tuple[PositionData, ...]:
+        return (await self.get_portfolio(account_id)).positions
 
     async def find_instrument(self, ticker: str, class_code: str) -> InstrumentData:
         try:
@@ -137,3 +155,72 @@ class MockBrokerProvider:
 
     async def post_sandbox_order(self, request: SandboxOrderRequest) -> SandboxOrderResult:
         raise RuntimeError("Mock provider cannot place sandbox broker orders")
+
+    def queue_stream_event(self, event: BrokerStreamEvent) -> None:
+        self._stream_events[event.stream_type].append(event)
+
+    def set_operations(self, operations: Sequence[BrokerOperation]) -> None:
+        self._operations = list(operations)
+
+    async def _stream(
+        self, stream_type: str, account_ids: Sequence[str]
+    ) -> AsyncIterator[BrokerStreamEvent]:
+        events = tuple(self._stream_events[stream_type])
+        if not events and account_ids:
+            now = self._clock()
+            yield BrokerStreamEvent(
+                "mock",
+                "sandbox",
+                stream_type,
+                "",
+                now,
+                now,
+                "PING",
+                None,
+                {},
+            )
+            yield BrokerStreamEvent(
+                "mock",
+                "sandbox",
+                stream_type,
+                account_ids[0],
+                now,
+                now,
+                "SUBSCRIPTION_STATUS",
+                f"mock-{stream_type.lower()}-subscription",
+                {"status": "SUBSCRIPTION_STATUS_SUCCESS"},
+            )
+            if stream_type in {"PORTFOLIO", "POSITIONS"}:
+                yield BrokerStreamEvent(
+                    "mock",
+                    "sandbox",
+                    stream_type,
+                    account_ids[0],
+                    now,
+                    now,
+                    f"{stream_type}_UPDATED",
+                    f"mock-{stream_type.lower()}-update",
+                    {"cash": "68750.00", "currency": "rub"},
+                )
+        for event in events:
+            yield event
+
+    def stream_portfolio(self, account_ids: Sequence[str]) -> AsyncIterator[BrokerStreamEvent]:
+        return self._stream("PORTFOLIO", account_ids)
+
+    def stream_positions(self, account_ids: Sequence[str]) -> AsyncIterator[BrokerStreamEvent]:
+        return self._stream("POSITIONS", account_ids)
+
+    def stream_user_trades(self, account_ids: Sequence[str]) -> AsyncIterator[BrokerStreamEvent]:
+        return self._stream("TRADES", account_ids)
+
+    async def get_operations_page(self, request: OperationsCursorRequest) -> OperationsCursorPage:
+        start = int(request.cursor or 0)
+        items = tuple(self._operations[start : start + request.limit])
+        next_index = start + len(items)
+        has_next = next_index < len(self._operations)
+        return OperationsCursorPage(
+            items=items,
+            next_cursor=str(next_index) if has_next else None,
+            has_next=has_next,
+        )

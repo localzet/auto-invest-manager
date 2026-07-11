@@ -12,6 +12,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import engine, get_session
 from app.models.entities import AutomationRun
 from app.models.enums import AutomationRunStatus
+from app.streams.schemas import StreamsStatusResponse
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -111,3 +112,13 @@ async def worker_health(
         last_run_finished_at=last_run.finished_at if last_run else None,
         running_runs=running,
     )
+
+
+@router.get("/streams", response_model=StreamsStatusResponse)
+async def stream_health(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> StreamsStatusResponse:
+    from app.api.streams import _status
+
+    return await _status(session, settings)

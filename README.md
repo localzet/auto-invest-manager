@@ -55,6 +55,7 @@ backend на порту 8000.
 - `GET /health/live` — процесс API работает;
 - `GET /health/ready` — PostgreSQL и Redis доступны;
 - `GET /health/worker` — безопасный статус worker и последних automation runs;
+- `GET /health/streams` — состояние stream listener, inbox и соединений;
 - `GET /docs` — Swagger UI;
 - `GET /openapi.json` — OpenAPI schema.
 
@@ -87,6 +88,13 @@ Admin API расположен под `/api/v1/admin` и требует заго
 - `GET /api/v1/admin/automation/runs/{run_id}`;
 - `POST /api/v1/admin/automation/run`;
 - `GET /api/v1/admin/automation/status`.
+- `GET /api/v1/admin/streams/status`;
+- `GET /api/v1/admin/streams/events`;
+- `GET /api/v1/admin/streams/events/{event_id}`;
+- `POST /api/v1/admin/streams/events/{event_id}/retry`;
+- `GET /api/v1/admin/account-events`;
+- `POST /api/v1/admin/accounts/{account_id}/reconcile`;
+- `GET /api/v1/admin/reconciliations`.
 
 Seed безопасных профилей выполняется при старте backend. Вручную:
 
@@ -162,3 +170,16 @@ curl -Method Post http://localhost:8000/api/v1/admin/automation/run `
 ```
 
 Production transport и `post_real_order` по-прежнему физически отсутствуют.
+
+## Event-driven account monitoring
+
+Отдельный `stream-listener` наблюдает PortfolioStream, PositionsStream и
+TradesStream. Streams выключены по умолчанию (`BROKER_STREAMS_ENABLED=false`) и
+никогда не являются источником истины: нормализованные события попадают в durable
+inbox, дедуплицируются и после Redis debounce запускают unary reconciliation.
+
+Пополнение подтверждается только выполненной операцией одного из разрешённых типов
+`INPUT`, `INPUT_ACQUIRING`, `INP_MULTI`, `INPUT_SWIFT`. Изменение cash, продажа,
+дивиденд, купон или перевод бумаг не классифицируются как денежное пополнение.
+Event-driven automation дополнительно выключена через
+`STREAM_AUTOMATION_TRIGGER_ENABLED=false`.

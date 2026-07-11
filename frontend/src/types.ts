@@ -168,3 +168,59 @@ export interface AutomationStatus {
   running_runs: number;
   last_run: AutomationRun | null;
 }
+
+export interface StreamUnitStatus {
+  status: string;
+  connected_at: string | null;
+  last_message_at: string | null;
+  last_ping_at: string | null;
+  last_event_at: string | null;
+  reconnect_count: number;
+}
+
+export interface StreamsStatus {
+  status: string;
+  enabled: boolean;
+  provider: string;
+  target: string;
+  listener: string;
+  streams: Record<string, StreamUnitStatus>;
+  pending_events: number;
+  dead_letter_events: number;
+}
+
+export interface BrokerStreamEventRecord {
+  id: string;
+  stream_type: string;
+  event_kind: string;
+  masked_account_id: string;
+  received_at: string;
+  processing_status: string;
+  processing_attempts: number;
+  error_code: string | null;
+  error_message: string | null;
+  payload: Record<string, unknown>;
+}
+
+export interface AccountEventRecord {
+  id: string;
+  event_type: string;
+  masked_account_id: string;
+  operation_type: string | null;
+  amount: string | null;
+  currency: string | null;
+  occurred_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ReconciliationRecord {
+  id: string;
+  status: string;
+  masked_account_id: string;
+  reasons: string[];
+  started_at: string | null;
+  finished_at: string | null;
+  operations_count: number;
+  account_events_count: number;
+  error_message: string | null;
+}

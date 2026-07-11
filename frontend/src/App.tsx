@@ -4,21 +4,26 @@ import type {
   AuditLog,
   AutomationRun,
   AutomationStatus,
+  AccountEventRecord,
+  BrokerStreamEventRecord,
   PlannedOrder,
   RebalancePlan,
+  ReconciliationRecord,
   RiskProfile,
   Signal,
   StrategyProfile,
+  StreamsStatus,
   SystemSettings,
   TradeMode,
   WatchlistItem,
 } from "./types";
 
-type Page = "dashboard" | "automation" | "watchlist" | "risk" | "strategy" | "rebalance" | "audit" | "safety";
+type Page = "dashboard" | "automation" | "streams" | "watchlist" | "risk" | "strategy" | "rebalance" | "audit" | "safety";
 
 const NAVIGATION: Array<{ id: Page; label: string; icon: string }> = [
   { id: "dashboard", label: "Обзор", icon: "◫" },
   { id: "automation", label: "Automation", icon: "↻" },
+  { id: "streams", label: "Streams & Events", icon: "≋" },
   { id: "watchlist", label: "Watchlist", icon: "◎" },
   { id: "risk", label: "Риск-профиль", icon: "◇" },
   { id: "strategy", label: "Стратегия", icon: "⌁" },
@@ -385,6 +390,43 @@ function Automation({ api }: { api: AdminApi }) {
   </PageLayout>;
 }
 
+function Streams({ api }: { api: AdminApi }) {
+  const [streamStatus, setStreamStatus] = useState<StreamsStatus>();
+  const [events, setEvents] = useState<BrokerStreamEventRecord[]>([]);
+  const [accountEvents, setAccountEvents] = useState<AccountEventRecord[]>([]);
+  const [reconciliations, setReconciliations] = useState<ReconciliationRecord[]>([]);
+  const [selected, setSelected] = useState<BrokerStreamEventRecord>();
+  const [accountId, setAccountId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try {
+      const [status, inbox, changes, history] = await Promise.all([
+        api.streamsStatus(), api.streamEvents(), api.accountEvents(), api.reconciliations(),
+      ]);
+      setStreamStatus(status); setEvents(inbox); setAccountEvents(changes);
+      setReconciliations(history); setError("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Ошибка загрузки streams");
+    }
+  }, [api]);
+  useEffect(() => void load(), [load]);
+
+  return <PageLayout title="Streams & Account Events" subtitle="Durable inbox и подтверждённая unary reconciliation">
+    <Notice error={error} />
+    <div className="metrics">
+      <Metric label="Stream listener" value={streamStatus?.status.toUpperCase() ?? "—"} detail={`${streamStatus?.provider ?? "—"} · ${streamStatus?.target ?? "—"}`} />
+      <Metric label="Portfolio / Positions" value={`${streamStatus?.streams.portfolio?.status ?? "—"} / ${streamStatus?.streams.positions?.status ?? "—"}`} detail="Наблюдение, не источник истины" />
+      <Metric label="Trades" value={streamStatus?.streams.trades?.status ?? "—"} detail={`${streamStatus?.streams.trades?.reconnect_count ?? 0} reconnects`} />
+      <Metric label="Inbox" value={String(streamStatus?.pending_events ?? 0)} detail={`${streamStatus?.dead_letter_events ?? 0} dead letter`} />
+    </div>
+    <section className="panel compact-panel"><form className="inline-form" onSubmit={async (event) => { event.preventDefault(); setBusy(true); try { await api.reconcileAccount(accountId); setAccountId(""); await load(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Ошибка reconciliation"); } finally { setBusy(false); } }}><label>Broker account ID<input value={accountId} onChange={(event) => setAccountId(event.target.value)} required placeholder="Полный ID вводится только для запуска" /></label><button className="button button--primary" disabled={busy}>{busy ? "Постановка…" : "Manual reconciliation"}</button></form></section>
+    <section className="panel"><div className="panel-heading"><div><p className="eyebrow">DURABLE INBOX</p><h2>Stream events</h2></div><button className="button" onClick={() => void load()}>Обновить</button></div>{events.length ? <div className="table-wrap"><table><thead><tr><th>Stream</th><th>Kind</th><th>Account</th><th>Status</th><th>Received</th><th></th></tr></thead><tbody>{events.map((item) => <tr key={item.id}><td>{item.stream_type}</td><td>{item.event_kind}</td><td>{item.masked_account_id}</td><td><Status value={item.processing_status} /></td><td>{formatDate(item.received_at)}</td><td><div className="button-row"><button className="button button--small" onClick={() => setSelected(item)}>JSON</button>{item.processing_status === "DEAD_LETTER" && <button className="button button--small button--danger" onClick={async () => { setBusy(true); try { await api.retryStreamEvent(item.id); await load(); } finally { setBusy(false); } }}>Retry</button>}</div></td></tr>)}</tbody></table></div> : <Empty>Inbox пуст.</Empty>}</section>
+    <div className="split-grid"><section className="panel"><div className="panel-heading"><div><p className="eyebrow">CONFIRMED CHANGES</p><h2>Account events</h2></div></div>{accountEvents.length ? <div className="decision-list">{accountEvents.slice(0, 12).map((item) => <article className="decision" key={item.id}><div><Status value={item.event_type} /><h3>{item.masked_account_id}</h3><p>{item.operation_type ?? "Unary account change"}{item.amount ? ` · ${item.amount} ${item.currency}` : ""}</p></div><time>{formatDate(item.occurred_at)}</time></article>)}</div> : <Empty>Подтверждённых изменений нет.</Empty>}</section><section className="panel"><div className="panel-heading"><div><p className="eyebrow">RECONCILIATION</p><h2>История сверок</h2></div></div>{reconciliations.length ? <div className="decision-list">{reconciliations.slice(0, 12).map((item) => <article className="decision" key={item.id}><div><Status value={item.status} /><h3>{item.masked_account_id}</h3><p>{item.reasons.join(", ")} · {item.operations_count} operations</p></div><time>{item.finished_at ? formatDate(item.finished_at) : "Running"}</time></article>)}</div> : <Empty>Сверок пока нет.</Empty>}</section></div>
+    {selected && <section className="panel automation-details"><div className="panel-heading"><div><p className="eyebrow">SANITIZED PAYLOAD</p><h2>{selected.event_kind}</h2></div><button className="button button--small" onClick={() => setSelected(undefined)}>Закрыть</button></div><div><pre>{JSON.stringify(selected.payload, null, 2)}</pre></div></section>}
+  </PageLayout>;
+}
+
 function Audit({ api }: { api: AdminApi }) {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [error, setError] = useState("");
@@ -428,6 +470,7 @@ export function App() {
   const pages: Record<Page, ReactNode> = {
     dashboard: <Dashboard api={api} />,
     automation: <Automation api={api} />,
+    streams: <Streams api={api} />,
     watchlist: <Watchlist api={api} />,
     risk: <ProfilePage api={api} kind="risk" />,
     strategy: <ProfilePage api={api} kind="strategy" />,

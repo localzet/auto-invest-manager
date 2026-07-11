@@ -70,6 +70,11 @@ async def run_scheduler() -> None:
                     "sync_instruments",
                     _job_id=f"instrument-sync:{instrument_bucket}",
                 )
+            cleanup_bucket = int(datetime.now(UTC).timestamp()) // 86400
+            await redis.enqueue_job(
+                "cleanup_processed_stream_events",
+                _job_id=f"stream-cleanup:{cleanup_bucket}",
+            )
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=60)
             except TimeoutError:

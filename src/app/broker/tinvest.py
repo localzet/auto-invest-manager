@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -7,11 +7,16 @@ from typing import Any
 
 from app.broker.dto import (
     BrokerAccountData,
+    BrokerCapabilities,
+    BrokerOperation,
+    BrokerStreamEvent,
     CandleData,
     CandleInterval,
     InstrumentData,
     LastPriceData,
     MoneyData,
+    OperationsCursorPage,
+    OperationsCursorRequest,
     PortfolioData,
     PositionData,
     SandboxOrderRequest,
@@ -56,6 +61,10 @@ class TInvestClient:
         self._target = target
         self._client_factory = client_factory
 
+    @property
+    def capabilities(self) -> BrokerCapabilities:
+        return BrokerCapabilities(True, True, True, True)
+
     async def get_accounts(self) -> tuple[BrokerAccountData, ...]:
         async with self._client_factory(self._token, self._target) as client:
             response = await client.users.get_accounts()
@@ -98,6 +107,20 @@ class TInvestClient:
             expected_yield=_decimal(response.expected_yield),
             positions=positions,
             captured_at=datetime.now(UTC),
+        )
+
+    async def get_positions(self, account_id: str) -> tuple[PositionData, ...]:
+        async with self._client_factory(self._token, self._target) as client:
+            response = await client.operations.get_positions(account_id=account_id)
+        return tuple(
+            PositionData(
+                instrument_uid=item.instrument_uid,
+                figi=item.figi,
+                quantity=Decimal(item.balance),
+                current_price=MoneyData(Decimal(0), ""),
+                average_price=None,
+            )
+            for item in response.securities
         )
 
     async def find_instrument(self, ticker: str, class_code: str) -> InstrumentData:
@@ -217,4 +240,176 @@ class TInvestClient:
             lots_executed=response.lots_executed,
             execution_price=_decimal(response.executed_order_price),
             total_amount=_decimal(response.total_order_amount),
+        )
+
+    async def stream_portfolio(
+        self, account_ids: Sequence[str]
+    ) -> AsyncIterator[BrokerStreamEvent]:
+        async with self._client_factory(self._token, self._target) as client:
+            async for response in client.operations_stream.portfolio_stream(
+                accounts=list(account_ids)
+            ):
+                now = datetime.now(UTC)
+                if response.ping:
+                    yield self._ping_event("PORTFOLIO", response.ping.time, now)
+                elif response.subscriptions:
+                    for item in response.subscriptions.accounts:
+                        yield BrokerStreamEvent(
+                            "tinvest",
+                            self._target,
+                            "PORTFOLIO",
+                            item.account_id,
+                            None,
+                            now,
+                            "SUBSCRIPTION_STATUS",
+                            None,
+                            {"status": _enum_name(item.subscription_status)},
+                        )
+                elif response.portfolio:
+                    item = response.portfolio
+                    yield BrokerStreamEvent(
+                        "tinvest",
+                        self._target,
+                        "PORTFOLIO",
+                        item.account_id,
+                        None,
+                        now,
+                        "PORTFOLIO_UPDATED",
+                        None,
+                        {
+                            "total_amount": str(_decimal(item.total_amount_portfolio)),
+                            "currency": item.total_amount_portfolio.currency,
+                            "positions_count": len(item.positions),
+                        },
+                    )
+
+    async def stream_positions(
+        self, account_ids: Sequence[str]
+    ) -> AsyncIterator[BrokerStreamEvent]:
+        async with self._client_factory(self._token, self._target) as client:
+            async for response in client.operations_stream.positions_stream(
+                accounts=list(account_ids)
+            ):
+                now = datetime.now(UTC)
+                if response.ping:
+                    yield self._ping_event("POSITIONS", response.ping.time, now)
+                elif response.subscriptions:
+                    for item in response.subscriptions.accounts:
+                        yield BrokerStreamEvent(
+                            "tinvest",
+                            self._target,
+                            "POSITIONS",
+                            item.account_id,
+                            None,
+                            now,
+                            "SUBSCRIPTION_STATUS",
+                            None,
+                            {"status": _enum_name(item.subscription_status)},
+                        )
+                elif response.position:
+                    item = response.position
+                    yield BrokerStreamEvent(
+                        "tinvest",
+                        self._target,
+                        "POSITIONS",
+                        item.account_id,
+                        item.date,
+                        now,
+                        "POSITIONS_UPDATED",
+                        None,
+                        {
+                            "money": [
+                                {
+                                    "amount": str(_decimal(value.available_value)),
+                                    "currency": value.available_value.currency,
+                                }
+                                for value in item.money
+                            ],
+                            "securities_count": len(item.securities),
+                        },
+                    )
+
+    async def stream_user_trades(
+        self, account_ids: Sequence[str]
+    ) -> AsyncIterator[BrokerStreamEvent]:
+        async with self._client_factory(self._token, self._target) as client:
+            async for response in client.orders_stream.trades_stream(accounts=list(account_ids)):
+                now = datetime.now(UTC)
+                if response.ping:
+                    yield self._ping_event("TRADES", response.ping.time, now)
+                elif response.order_trades:
+                    item = response.order_trades
+                    trades = [
+                        {
+                            "trade_id": trade.trade_id,
+                            "quantity": trade.quantity,
+                            "price": str(_decimal(trade.price)),
+                            "created_at": trade.date_time.isoformat(),
+                        }
+                        for trade in item.trades
+                    ]
+                    yield BrokerStreamEvent(
+                        "tinvest",
+                        self._target,
+                        "TRADES",
+                        item.account_id,
+                        item.created_at,
+                        now,
+                        "USER_TRADE_EXECUTED",
+                        ",".join(sorted(trade["trade_id"] for trade in trades)),
+                        {
+                            "order_id": item.order_id,
+                            "instrument_uid": item.instrument_uid,
+                            "figi": item.figi,
+                            "direction": _enum_name(item.direction),
+                            "trades": trades,
+                        },
+                    )
+
+    async def get_operations_page(self, request: OperationsCursorRequest) -> OperationsCursorPage:
+        from tinkoff.invest import GetOperationsByCursorRequest, OperationState
+
+        sdk_request = GetOperationsByCursorRequest(
+            account_id=request.account_id,
+            from_=request.from_,
+            to=request.to,
+            cursor=request.cursor or "",
+            limit=request.limit,
+            state=OperationState.OPERATION_STATE_EXECUTED,
+            without_commissions=False,
+            without_trades=False,
+            without_overnights=True,
+        )
+        async with self._client_factory(self._token, self._target) as client:
+            response = await client.operations.get_operations_by_cursor(request=sdk_request)
+        return OperationsCursorPage(
+            items=tuple(
+                BrokerOperation(
+                    operation_id=item.id,
+                    cursor=item.cursor,
+                    operation_type=_enum_name(item.type),
+                    state=_enum_name(item.state),
+                    payment=MoneyData(_decimal(item.payment), item.payment.currency),
+                    date=item.date,
+                    instrument_uid=item.instrument_uid or None,
+                )
+                for item in response.items
+            ),
+            next_cursor=response.next_cursor or None,
+            has_next=response.has_next,
+        )
+
+    def _ping_event(
+        self, stream_type: str, broker_time: datetime, received_at: datetime
+    ) -> BrokerStreamEvent:
+        return BrokerStreamEvent(
+            "tinvest",
+            self._target,
+            stream_type,
+            "",
+            broker_time,
+            received_at,
+            "PING",
+            None,
+            {},
         )

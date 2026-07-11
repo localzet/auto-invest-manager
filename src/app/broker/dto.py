@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 from app.models.enums import OrderDirection, OrderType
 
@@ -104,3 +105,51 @@ class SandboxOrderResult:
     lots_executed: int
     execution_price: Decimal
     total_amount: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class BrokerCapabilities:
+    portfolio_stream_supported: bool = False
+    positions_stream_supported: bool = False
+    trades_stream_supported: bool = False
+    operations_cursor_supported: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class BrokerStreamEvent:
+    provider: str
+    target: str
+    stream_type: str
+    account_id: str
+    broker_event_time: datetime | None
+    received_at: datetime
+    event_kind: str
+    source_event_id: str | None
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class OperationsCursorRequest:
+    account_id: str
+    from_: datetime
+    to: datetime
+    cursor: str | None = None
+    limit: int = 100
+
+
+@dataclass(frozen=True, slots=True)
+class BrokerOperation:
+    operation_id: str
+    cursor: str
+    operation_type: str
+    state: str
+    payment: MoneyData
+    date: datetime
+    instrument_uid: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class OperationsCursorPage:
+    items: tuple[BrokerOperation, ...]
+    next_cursor: str | None
+    has_next: bool

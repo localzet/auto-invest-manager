@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -15,9 +16,11 @@ from app.automation.retry import RetryPolicy
 from app.broker.factory import create_broker_provider
 from app.core.config import get_settings
 from app.db.session import session_factory
-from app.models.enums import AutomationTrigger
+from app.models.enums import AutomationTrigger, StreamEventProcessingStatus
 from app.notifications.dto import Notification, NotificationSeverity
 from app.notifications.factory import create_notifier
+from app.streams.processor import process_event, run_reconciliation_job
+from app.streams.repository import StreamRepository
 
 
 async def run_automation_cycle(
@@ -73,6 +76,55 @@ async def sync_instruments(ctx: dict[str, Any]) -> dict[str, int]:
     return {"instruments": len(references)}
 
 
+async def process_broker_stream_event(ctx: dict[str, Any], event_id: str) -> dict[str, bool]:
+    settings = get_settings()
+    async with session_factory() as session:
+        repository = StreamRepository(session)
+        try:
+            async with asyncio.timeout(settings.stream_event_processing_timeout_seconds):
+                processed = await process_event(
+                    repository,
+                    ctx["redis"],
+                    create_notifier(settings),
+                    UUID(event_id),
+                    settings.stream_event_max_processing_attempts,
+                    settings.account_event_debounce_seconds,
+                    settings.account_event_max_debounce_seconds,
+                )
+        except TimeoutError:
+            event = await repository.get_event(UUID(event_id))
+            if event is not None:
+                await repository.fail_event(
+                    event,
+                    settings.stream_event_max_processing_attempts,
+                    "stream_event_timeout",
+                    "Stream event processing timed out",
+                )
+            processed = False
+        if not processed:
+            event = await repository.get_event(UUID(event_id))
+            if event is not None and event.processing_status is StreamEventProcessingStatus.FAILED:
+                await ctx["redis"].enqueue_job(
+                    "process_broker_stream_event",
+                    event_id,
+                    _job_id=f"stream-event:{event_id}:{event.processing_attempts}",
+                    _defer_by=timedelta(seconds=min(60, 2**event.processing_attempts)),
+                )
+    return {"processed": processed}
+
+
+async def reconcile_account(ctx: dict[str, Any], account_id: str, state_key: str) -> dict[str, Any]:
+    return await run_reconciliation_job(ctx, account_id, state_key)
+
+
+async def cleanup_processed_stream_events(ctx: dict[str, Any]) -> dict[str, int]:
+    settings = get_settings()
+    before = datetime.now(UTC) - timedelta(days=settings.stream_event_retention_days)
+    async with session_factory() as session:
+        deleted = await StreamRepository(session).cleanup(before)
+    return {"deleted": deleted}
+
+
 def _retry_policy(settings: Any) -> RetryPolicy:
     return RetryPolicy(
         settings.broker_retry_max_attempts,
@@ -86,6 +138,15 @@ async def startup(ctx: dict[str, Any]) -> None:
     threshold = datetime.now(UTC) - timedelta(seconds=settings.stale_run_threshold_seconds)
     async with session_factory() as session:
         recovered = await AutomationRepository(session).recover_stale(threshold)
+        stream_repository = StreamRepository(session)
+        await stream_repository.startup_recovery()
+        pending_event_ids = await stream_repository.pending_event_ids()
+    for event_id in pending_event_ids:
+        await ctx["redis"].enqueue_job(
+            "process_broker_stream_event",
+            str(event_id),
+            _job_id=f"stream-event-recovery:{event_id}",
+        )
     if recovered:
         await create_notifier(settings).send(
             Notification(
@@ -98,7 +159,14 @@ async def startup(ctx: dict[str, Any]) -> None:
 
 class WorkerSettings:
     settings = get_settings()
-    functions = [run_automation_cycle, sync_accounts, sync_instruments]
+    functions = [
+        run_automation_cycle,
+        sync_accounts,
+        sync_instruments,
+        process_broker_stream_event,
+        reconcile_account,
+        cleanup_processed_stream_events,
+    ]
     on_startup = startup
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     health_check_key = "automation:worker:health"

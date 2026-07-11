@@ -94,3 +94,59 @@ class AutomationStep(StrEnum):
     MODE_EXECUTION = "MODE_EXECUTION"
     FINAL_RECONCILIATION = "FINAL_RECONCILIATION"
     COMPLETED = "COMPLETED"
+
+
+class BrokerStreamType(StrEnum):
+    PORTFOLIO = "PORTFOLIO"
+    POSITIONS = "POSITIONS"
+    TRADES = "TRADES"
+
+
+class BrokerStreamEventKind(StrEnum):
+    PORTFOLIO_UPDATED = "PORTFOLIO_UPDATED"
+    POSITIONS_UPDATED = "POSITIONS_UPDATED"
+    USER_TRADE_EXECUTED = "USER_TRADE_EXECUTED"
+    SUBSCRIPTION_STATUS = "SUBSCRIPTION_STATUS"
+    PING = "PING"
+
+
+class StreamEventProcessingStatus(StrEnum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    PROCESSED = "PROCESSED"
+    IGNORED = "IGNORED"
+    FAILED = "FAILED"
+    DEAD_LETTER = "DEAD_LETTER"
+
+
+class BrokerStreamStatus(StrEnum):
+    DISABLED = "DISABLED"
+    STARTING = "STARTING"
+    CONNECTING = "CONNECTING"
+    CONNECTED = "CONNECTED"
+    DEGRADED = "DEGRADED"
+    RECONNECTING = "RECONNECTING"
+    FAILED = "FAILED"
+    STOPPED = "STOPPED"
+
+
+class AccountEventType(StrEnum):
+    ACCOUNT_CHANGE = "ACCOUNT_CHANGE"
+    DEPOSIT_DETECTED = "DEPOSIT_DETECTED"
+    WITHDRAWAL_DETECTED = "WITHDRAWAL_DETECTED"
+    ORDER_EXECUTION_DETECTED = "ORDER_EXECUTION_DETECTED"
+
+
+class ReconciliationStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
+class ReconciliationReason(StrEnum):
+    PORTFOLIO_CHANGED = "portfolio_changed"
+    POSITIONS_CHANGED = "positions_changed"
+    USER_TRADE = "user_trade"
+    STREAM_RECONNECTED = "stream_reconnected"
+    MANUAL = "manual"

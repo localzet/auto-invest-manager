@@ -79,6 +79,55 @@ run. Lock `automation-cycle:{account_id}` берётся атомарно с TTL
 скриптом только при совпадении owner token. Зависшие RUNNING runs при старте worker
 получают `FAILED/stale_worker_run`; чужой lock не удаляется и освобождается по TTL.
 
+## Broker streams и reconciliation
+
+Stream listener запускается отдельным процессом:
+
+```powershell
+docker compose up -d stream-listener worker
+```
+
+Безопасные значения:
+
+```dotenv
+BROKER_STREAMS_ENABLED=false
+STREAM_AUTOMATION_TRIGGER_ENABLED=false
+PORTFOLIO_STREAM_ENABLED=true
+POSITIONS_STREAM_ENABLED=true
+TRADES_STREAM_ENABLED=true
+```
+
+PortfolioStream сообщает об изменении оценки портфеля, PositionsStream — денег и
+позиций, TradesStream — об исполнениях поручений. Сообщение лишь создаёт запись в
+`broker_stream_events`; окончательное состояние всегда читается unary-вызовами
+positions/portfolio/operations. Ping обновляет health и не создаёт account event.
+
+Inbox использует canonical JSON и SHA-256 ключ без `received_at`. Повторное событие
+не создаёт копию. Несколько событий одного счёта объединяются Redis debounce в одну
+reconciliation; maximum debounce не позволяет непрерывному потоку откладывать её
+бесконечно. Leader lease продлевается и освобождается Lua-скриптами только owner.
+
+Operations cursor обновляется после успешного чтения всех страниц. Deposit создаётся
+только для выполненных `OPERATION_TYPE_INPUT`, `INPUT_ACQUIRING`, `INP_MULTI` или
+`INPUT_SWIFT`. `SELL`, `DIVIDEND`, `COUPON`, `INPUT_SECURITIES`, комиссии и налоги
+deposit не создают. Выводы классифицируются отдельно.
+
+Диагностика:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/health/streams
+Invoke-RestMethod http://localhost:8000/api/v1/admin/streams/status `
+  -Headers @{"X-Admin-API-Key"=$env:ADMIN_API_KEY}
+```
+
+Dead-letter event повторяется защищённым endpoint
+`POST /api/v1/admin/streams/events/{event_id}/retry`; исходный event ID и dedupe key
+сохраняются. Manual reconciliation:
+`POST /api/v1/admin/accounts/{account_id}/reconcile`. При degraded состоянии
+проверьте stream state, свежесть ping, Redis, provider target и terminal error.
+Sandbox target не переключается на production; production order transport всё ещё
+отсутствует.
+
 ## Инциденты
 
 ### Немедленная остановка исполнения
